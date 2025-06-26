@@ -1,0 +1,44 @@
+{
+  "name": "@relay-works/sms-dev-ui",
+  "version": "1.0.0",
+  "description": "Virtual Phone UI for sms-dev - browser-based SMS testing interface",
+
+  "scripts": {
+    "build": "next build",
+    "dev": "next dev",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "sms",
+    "ui",
+    "virtual-phone",
+    "relay",
+    "development"
+  ],
+  "author": "Relay",
+  "license": "MIT",
+  "dependencies": {
+    "@headlessui/react": "^1.7.18",
+    "@heroicons/react": "^2.0.18",
+    "@relay-works/sms-dev-types": "^1.0.0",
+    "autoprefixer": "^10.4.19",
+    "clsx": "^2.1.0",
+    "next": "14.2.5",
+    "postcss": "^8.4.38",
+    "react": "^18",
+    "react-dom": "^18",
+    "socket.io-client": "^4.7.4",
+    "tailwindcss": "^3.4.1"
+  },
+  "devDependencies": {
+    "@relay/typescript-config": "^1.0.0",
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.5",
+    "typescript": "^5"
+  }
+}

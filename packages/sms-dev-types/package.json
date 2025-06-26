@@ -1,0 +1,25 @@
+{
+  "name": "@relay-works/sms-dev-types",
+  "version": "1.0.0",
+  "description": "Shared TypeScript types for sms-dev ecosystem",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["sms", "types", "typescript", "relay"],
+  "author": "Relay",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.5.3",
+    "@relay/typescript-config": "^1.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+} 

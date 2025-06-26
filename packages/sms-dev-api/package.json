@@ -1,0 +1,47 @@
+{
+  "name": "@relay-works/sms-dev-api",
+  "version": "1.0.0",
+  "description": "Local API server that simulates the Relay SMS API",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "sms",
+    "api",
+    "server",
+    "relay",
+    "development"
+  ],
+  "author": "Relay",
+  "license": "MIT",
+  "dependencies": {
+    "@relay-works/sms-dev-types": "^1.0.0",
+    "@types/node-fetch": "^2.6.11",
+    "axios": "^1.6.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-validator": "^7.0.1",
+    "node-fetch": "^2.7.0",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@relay/typescript-config": "^1.0.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.9",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.5.3"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

@@ -4,6 +4,24 @@ import { body, param, query, validationResult } from 'express-validator'
 
 const router = Router()
 
+// GET /v1/dev/status - Health check and status
+router.get('/status', (req: Request, res: Response) => {
+  res.json({
+    status: 'running',
+    service: 'sms-dev-api',
+    version: '1.0.1',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: 'development',
+    features: {
+      mockPhones: true,
+      conversationFlows: true,
+      loadTesting: true,
+      webhooks: true
+    }
+  })
+})
+
 // Mock phone number storage
 interface MockPhone {
   id: string

@@ -1,6 +1,6 @@
 import { Server as SocketIOServer } from 'socket.io'
 import { SocketEvents } from '@relay-works/sms-dev-types'
-import { WebhookService } from './webhookService'
+import { WebhookService } from './webhookService.js'
 
 export function setupSocketHandlers(io: SocketIOServer, webhookService: WebhookService) {
   io.on('connection', (socket) => {

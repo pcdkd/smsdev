@@ -4,12 +4,12 @@ import { Server as SocketIOServer } from 'socket.io'
 import cors from 'cors'
 import { ApiServerOptions } from '@relay-works/sms-dev-types'
 
-import { messagesRouter } from './routes/messages'
-import { webhooksRouter } from './routes/webhooks'
-import { devRouter } from './routes/dev'
-import { setupSocketHandlers } from './services/socketService'
-import { WebhookService } from './services/webhookService'
-import { logger } from './middleware/logging'
+import { messagesRouter } from './routes/messages.js'
+import { webhooksRouter } from './routes/webhooks.js'
+import { devRouter } from './routes/dev.js'
+import { setupSocketHandlers } from './services/socketService.js'
+import { WebhookService } from './services/webhookService.js'
+import { logger } from './middleware/logging.js'
 
 export class SmsDevApiServer {
   private app: express.Application

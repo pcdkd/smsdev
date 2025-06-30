@@ -3,6 +3,7 @@ import detectPort from 'detect-port'
 import { createApiServer } from '@relay-works/sms-dev-api'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { UIServer } from '../utils/uiServer.js'
 
 interface StartOptions {
   apiPort: number
@@ -13,7 +14,7 @@ interface StartOptions {
 }
 
 let apiServerInstance: any = null
-let uiProcess: ChildProcess | null = null
+let uiServerInstance: UIServer | null = null
 
 export async function startSmsDevServer(options: StartOptions): Promise<void> {
   // Check if ports are available
@@ -45,77 +46,17 @@ export async function startSmsDevServer(options: StartOptions): Promise<void> {
 }
 
 async function startUiServer(uiPort: number, apiPort: number, verbose: boolean): Promise<void> {
-  return new Promise((resolve, reject) => {
-    // Get the path to the UI package
-    const __filename = fileURLToPath(import.meta.url)
-    const __dirname = path.dirname(__filename)
-    const uiPackagePath = path.resolve(__dirname, '../../../../packages/sms-dev-ui')
-    
-    // Set environment variables for the UI server
-    const env = {
-      ...process.env,
-      PORT: uiPort.toString(),
-      NEXT_PUBLIC_API_URL: `http://localhost:${apiPort}`,
-      NODE_ENV: 'development'
-    }
+  if (verbose) {
+    console.log(`📱 Starting bundled UI server on port ${uiPort}`)
+  }
 
-    if (verbose) {
-      console.log(`📱 Starting UI server at ${uiPackagePath}`)
-    }
-
-    // Start the Next.js UI server
-    uiProcess = spawn('npm', ['run', 'dev'], {
-      cwd: uiPackagePath,
-      env,
-      stdio: verbose ? 'inherit' : 'pipe',
-      shell: true
-    })
-
-    let resolved = false
-
-    uiProcess.stdout?.on('data', (data) => {
-      const output = data.toString()
-      if (verbose) {
-        console.log('UI:', output)
-      }
-      // Resolve as soon as we see Next.js output - it's starting successfully
-      if (output.includes('Next.js') || output.includes('Local:') || output.includes('Starting...')) {
-        if (!resolved) {
-          resolved = true
-          resolve()
-        }
-      }
-    })
-
-    uiProcess.stderr?.on('data', (data) => {
-      const output = data.toString()
-      if (verbose) {
-        console.error('UI Error:', output)
-      }
-      // Don't reject on stderr as Next.js often logs warnings there
-    })
-
-    uiProcess.on('error', (error) => {
-      if (!resolved) {
-        reject(new Error(`Failed to start UI server: ${error.message}`))
-      }
-    })
-
-    uiProcess.on('exit', (code) => {
-      if (code !== 0 && !resolved) {
-        reject(new Error(`UI server exited with code ${code}`))
-      }
-    })
-
-    // Timeout after 15 seconds - if it hasn't resolved by then, assume it's working
-    setTimeout(() => {
-      if (!resolved) {
-        console.log('⚠️  UI server detection timed out, but process appears to be running')
-        resolved = true
-        resolve()
-      }
-    }, 15000)
+  uiServerInstance = new UIServer({
+    port: uiPort,
+    apiPort: apiPort,
+    verbose: verbose
   })
+
+  await uiServerInstance.start()
 }
 
 export async function stopSmsDevServer(): Promise<void> {
@@ -128,23 +69,9 @@ export async function stopSmsDevServer(): Promise<void> {
   }
 
   // Stop UI server
-  if (uiProcess) {
-    promises.push(new Promise((resolve) => {
-      uiProcess!.kill('SIGTERM')
-      uiProcess!.on('exit', () => {
-        uiProcess = null
-        resolve()
-      })
-      
-      // Force kill after 5 seconds
-      setTimeout(() => {
-        if (uiProcess) {
-          uiProcess.kill('SIGKILL')
-          uiProcess = null
-        }
-        resolve()
-      }, 5000)
-    }))
+  if (uiServerInstance) {
+    promises.push(uiServerInstance.stop())
+    uiServerInstance = null
   }
 
   await Promise.all(promises)

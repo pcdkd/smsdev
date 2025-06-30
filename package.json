@@ -1,6 +1,6 @@
 {
   "name": "@relay-works/sms-dev",
-  "version": "1.0.1",
+  "version": "2.0.1",
   "type": "module",
   "description": "Local SMS development environment - the Mailtrap for SMS. Test SMS applications without costs or phone numbers.",
   "main": "dist/cli.js",
@@ -9,14 +9,16 @@
   },
   "files": [
     "dist/**/*",
+    "ui-assets/**/*",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:ui && tsc",
+    "build:ui": "mkdir -p ui-assets && cd ../../packages/sms-dev-ui && npm run build && cp -r .next/* ../../apps/sms-dev/ui-assets/ && cp next.config.js ../../apps/sms-dev/ui-assets/",
     "dev": "tsc --watch",
     "start": "node dist/cli.js",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist ui-assets",
     "prepublishOnly": "npm run clean && npm run build",
     "test": "jest",
     "test:watch": "jest --watch",
@@ -52,9 +54,8 @@
   },
   "preferGlobal": true,
   "dependencies": {
-    "@relay-works/sms-dev-api": "^1.0.0",
-    "@relay-works/sms-dev-types": "^1.0.0",
-    "@relay-works/sms-dev-ui": "^1.0.0",
+    "@relay-works/sms-dev-api": "^1.0.3",
+    "@relay-works/sms-dev-types": "^1.0.1",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",
     "concurrently": "^8.2.2",

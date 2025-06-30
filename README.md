@@ -4,7 +4,7 @@
 
 Test SMS applications without costs, phone numbers, or external dependencies. A complete local development tool that simulates SMS functionality with a beautiful web interface.
 
-[![npm version](https://badge.fury.io/js/%40relay%2Fsms-dev.svg)](https://badge.fury.io/js/%40relay%2Fsms-dev)
+[![npm version](https://badge.fury.io/js/%40relay-works%2Fsms-dev.svg)](https://badge.fury.io/js/%40relay-works%2Fsms-dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 
@@ -27,7 +27,7 @@ Test SMS applications without costs, phone numbers, or external dependencies. A 
 
 ```bash
 # Install globally via npm
-npm install -g @relay/sms-dev
+npm install -g @relay-works/sms-dev
 
 # Start the development environment
 sms-dev start
@@ -41,7 +41,7 @@ sms-dev start
 
 ```bash
 # Install locally in your project
-npm install --save-dev @relay/sms-dev
+npm install --save-dev @relay-works/sms-dev
 
 # Add to package.json scripts
 {
@@ -313,10 +313,10 @@ sms-dev start --port 4002 --ui-port 4003
 
 ```bash
 # Install with correct permissions
-sudo npm install -g @relay/sms-dev
+sudo npm install -g @relay-works/sms-dev
 
 # Or use npx without global install
-npx @relay/sms-dev start
+npx @relay-works/sms-dev start
 ```
 
 ### Configuration Issues
@@ -337,8 +337,8 @@ If you're working with the sms-dev source code:
 
 ```bash
 # Clone repository
-git clone https://github.com/relay/sms-dev.git
-cd sms-dev
+git clone https://github.com/pcdkd/smsdev.git
+cd smsdev
 
 # Install dependencies
 npm install
@@ -358,8 +358,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ```bash
 # Fork and clone the repository
-git clone https://github.com/your-username/sms-dev.git
-cd sms-dev
+git clone https://github.com/your-username/smsdev.git
+cd smsdev
 
 # Install dependencies
 npm install
@@ -376,17 +376,17 @@ npm run dev
 
 ## 📄 License
 
-MIT © [Relay](https://relay.com)
+MIT © [Relay](https://relay.works)
 
 ## 🔗 Links
 
 - **Documentation**: [smsdev.app](https://smsdev.app)
-- **GitHub**: [github.com/relay/sms-dev](https://github.com/relay/sms-dev)
-- **npm**: [npmjs.com/package/@relay/sms-dev](https://npmjs.com/package/@relay/sms-dev)
-- **Relay Platform**: [relay.com](https://relay.com)
+- **GitHub**: [github.com/pcdkd/smsdev](https://github.com/pcdkd/smsdev)
+- **npm**: [npmjs.com/package/@relay-works/sms-dev](https://www.npmjs.com/package/@relay-works/sms-dev)
+- **Relay Platform**: [relay.works](https://relay.works)
 
 ---
 
 <p align="center">
-  Made with ❤️ by the <a href="https://relay.com">Relay</a> team
+  Made with ❤️ by the <a href="https://relay.works">Relay</a> team
 </p> # Test automation - Sun Jun 29 22:08:30 EDT 2025

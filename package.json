@@ -76,11 +76,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/relay/sms-dev.git",
-    "directory": "apps/sms-dev"
+    "url": "https://github.com/pcdkd/smsdev.git"
   },
   "bugs": {
-    "url": "https://github.com/relay/sms-dev/issues"
+    "url": "https://github.com/pcdkd/smsdev/issues"
   },
   "homepage": "https://smsdev.app",
   "funding": {

@@ -4,7 +4,7 @@
 
 Test SMS applications without costs, phone numbers, or external dependencies. A complete local development tool that simulates SMS functionality with a beautiful web interface.
 
-[![npm version](https://badge.fury.io/js/%40relay-works%2Fsms-dev.svg)](https://badge.fury.io/js/%40relay-works%2Fsms-dev)
+[![npm version](https://img.shields.io/npm/v/@relay-works/sms-dev)](https://www.npmjs.com/package/@relay-works/sms-dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)](https://nodejs.org/)
 

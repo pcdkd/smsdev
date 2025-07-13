@@ -449,72 +449,19 @@ function interpolateMessage(message: string, context: Record<string, any>): stri
   })
 }
 
-// Helper function to evaluate simple conditions safely
+// Helper function to evaluate simple conditions
 function evaluateCondition(condition: string, context: Record<string, any>): boolean {
-  // Safe condition evaluation without eval()
+  // Simple condition evaluation - can be expanded with proper parser
   try {
     // Replace template variables
-    let processedCondition = condition.replace(/\{\{(\w+)\}\}/g, (match, key) => {
+    const interpolated = condition.replace(/\{\{(\w+)\}\}/g, (match, key) => {
       const value = context[key]
-      if (value === undefined || value === null) return 'null'
-      if (typeof value === 'string') return `"${value}"`
-      if (typeof value === 'boolean') return String(value)
-      if (typeof value === 'number') return String(value)
-      return JSON.stringify(value)
+      return typeof value === 'string' ? `"${value}"` : String(value)
     })
     
-    // Safe evaluation of common conditions without eval()
-    // Support basic comparisons: ==, !=, >, <, >=, <=, &&, ||
-    
-    // Handle boolean literals
-    if (processedCondition === 'true') return true
-    if (processedCondition === 'false') return false
-    
-    // Handle simple equality/inequality checks
-    const equalityMatch = processedCondition.match(/^"?([^"]*)"?\s*(==|!=|===|!==)\s*"?([^"]*)"?$/)
-    if (equalityMatch) {
-      const [, left, operator, right] = equalityMatch
-      switch (operator) {
-        case '==':
-        case '===':
-          return left === right
-        case '!=':
-        case '!==':
-          return left !== right
-      }
-    }
-    
-    // Handle numeric comparisons
-    const comparisonMatch = processedCondition.match(/^(\d+(?:\.\d+)?)\s*(>|<|>=|<=)\s*(\d+(?:\.\d+)?)$/)
-    if (comparisonMatch) {
-      const [, left, operator, right] = comparisonMatch
-      const leftNum = parseFloat(left)
-      const rightNum = parseFloat(right)
-      switch (operator) {
-        case '>': return leftNum > rightNum
-        case '<': return leftNum < rightNum
-        case '>=': return leftNum >= rightNum
-        case '<=': return leftNum <= rightNum
-      }
-    }
-    
-    // Handle AND conditions
-    if (processedCondition.includes(' && ')) {
-      const parts = processedCondition.split(' && ')
-      return parts.every(part => evaluateCondition(part.trim(), {}))
-    }
-    
-    // Handle OR conditions
-    if (processedCondition.includes(' || ')) {
-      const parts = processedCondition.split(' || ')
-      return parts.some(part => evaluateCondition(part.trim(), {}))
-    }
-    
-    // Default to false for unrecognized conditions
-    console.warn(`Unable to evaluate condition: ${condition}`)
-    return false
-  } catch (error) {
-    console.error('Error evaluating condition:', error)
+    // Very basic evaluation (in production, use a safe expression evaluator)
+    return eval(interpolated)
+  } catch {
     return false
   }
 }

@@ -192,7 +192,15 @@ describe('PerformanceCommand', () => {
     it('should handle API errors during stats fetch', async () => {
       mockApiClient.get.mockRejectedValue(new ApiError('Service unavailable', 503, ENDPOINTS.PERFORMANCE_STATS))
       
-      await expect(command.execute({ action: 'stats' })).rejects.toThrow('Service unavailable')
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
+      await expect(command.execute({ action: 'stats' })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Service unavailable'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 
@@ -324,7 +332,15 @@ describe('PerformanceCommand', () => {
     it('should handle API errors during load test start', async () => {
       mockApiClient.post.mockRejectedValue(new ApiError('Load test limit exceeded', 429, ENDPOINTS.LOAD_TEST))
       
-      await expect(command.execute({ action: 'load-test' })).rejects.toThrow('Load test limit exceeded')
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
+      await expect(command.execute({ action: 'load-test' })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Load test limit exceeded'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 
@@ -449,13 +465,21 @@ describe('PerformanceCommand', () => {
     it('should show good performance message when no issues', async () => {
       const goodStats = {
         ...MOCK_PERFORMANCE_STATS,
+        uptime: 30, // Short uptime so no throughput insights
         memory: {
-          heapUsed: 25 * 1024 * 1024, // 25MB
-          heapTotal: 100 * 1024 * 1024, // 100MB (25% usage)
-          rss: 50 * 1024 * 1024
+          heapUsed: 50 * 1024 * 1024, // 50MB
+          heapTotal: 100 * 1024 * 1024, // 100MB (50% usage - between 20% and 80%)
+          rss: 80 * 1024 * 1024,
+          external: 1024000,
+          arrayBuffers: 512000
         },
-        api: { ...MOCK_PERFORMANCE_STATS.api, mock_phones: 5 },
-        system: { cpu: 0.3, loadAvg: [0.2, 0.3, 0.4] }
+        api: { 
+          ...MOCK_PERFORMANCE_STATS.api, 
+          mock_phones: 5, // More than 0
+          active_flows: 3, // Less than 10
+          total_messages: 0 // No messages to avoid throughput insights
+        },
+        system: { cpu: 0.3, loadAvg: [0.2, 0.3, 0.4], platform: 'darwin', nodeVersion: '18.19.0', pid: 12345 }
       }
       mockApiClient.get.mockResolvedValue(goodStats)
 
@@ -469,13 +493,29 @@ describe('PerformanceCommand', () => {
     it('should provide proper error context for stats', async () => {
       mockApiClient.get.mockRejectedValue(new Error('Network error'))
       
-      await expect(command.execute({ action: 'stats' })).rejects.toThrow('Network error')
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
+      await expect(command.execute({ action: 'stats' })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Network error'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
 
     it('should provide proper error context for load test', async () => {
       mockApiClient.post.mockRejectedValue(new Error('Network error'))
       
-      await expect(command.execute({ action: 'load-test' })).rejects.toThrow('Network error')
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
+      await expect(command.execute({ action: 'load-test' })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Network error'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 

@@ -72,7 +72,8 @@ describe('FlowCommand', () => {
         ]
       }
       
-      mockFs.readFileSync.mockReturnValue(JSON.stringify(flowDefinition))
+      const mockReadFileSync = jest.fn().mockReturnValue(JSON.stringify(flowDefinition))
+      ;(fs as any).readFileSync = mockReadFileSync
       mockApiClient.post.mockResolvedValue({
         ...MOCK_FLOW_RESPONSE,
         ...flowDefinition,
@@ -86,7 +87,7 @@ describe('FlowCommand', () => {
 
       await command.execute(options)
 
-      expect(mockFs.readFileSync).toHaveBeenCalledWith('test-flow.json', 'utf8')
+      expect(mockReadFileSync).toHaveBeenCalledWith('test-flow.json', 'utf8')
       expect(mockApiClient.post).toHaveBeenCalledWith(ENDPOINTS.CONVERSATION_FLOWS, flowDefinition)
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Conversation flow created'))
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Test Flow'))
@@ -115,20 +116,33 @@ describe('FlowCommand', () => {
     })
 
     it('should display flow creation details with trigger', async () => {
+      const flowDefinition = {
+        name: 'Triggered Flow',
+        description: 'A flow with custom trigger',
+        trigger: { type: 'keyword', value: 'start' },
+        steps: [
+          { type: 'send', message: 'Hello!', delay: 1000 }
+        ]
+      }
+      
+      // Mock fs.readFileSync to return our custom flow
+      const mockReadFileSync = jest.fn().mockReturnValue(JSON.stringify(flowDefinition))
+      ;(fs as any).readFileSync = mockReadFileSync
+      
       const flowWithTrigger = {
         ...MOCK_FLOW_RESPONSE,
-        trigger: { type: 'keyword', value: 'start' }
+        ...flowDefinition
       }
       mockApiClient.post.mockResolvedValue(flowWithTrigger)
       
       const options = {
         action: 'create',
-        name: 'Triggered Flow'
+        file: 'triggered-flow.json'
       }
 
       await command.execute(options)
 
-      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Trigger: keyword = "start"'))
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('🎯 Trigger: keyword = "start"'))
     })
 
     it('should validate that either file or name is provided', async () => {
@@ -138,9 +152,10 @@ describe('FlowCommand', () => {
     })
 
     it('should handle file reading errors', async () => {
-      mockFs.readFileSync.mockImplementation(() => {
+      const mockReadFileSync = jest.fn().mockImplementation(() => {
         throw new Error('File not found')
       })
+      ;(fs as any).readFileSync = mockReadFileSync
       
       const options = {
         action: 'create',
@@ -151,7 +166,8 @@ describe('FlowCommand', () => {
     })
 
     it('should handle JSON parsing errors', async () => {
-      mockFs.readFileSync.mockReturnValue('invalid json')
+      const mockReadFileSync = jest.fn().mockReturnValue('invalid json')
+      ;(fs as any).readFileSync = mockReadFileSync
       
       const options = {
         action: 'create',
@@ -164,12 +180,20 @@ describe('FlowCommand', () => {
     it('should handle API errors during creation', async () => {
       mockApiClient.post.mockRejectedValue(new ApiError('Invalid flow definition', 400, ENDPOINTS.CONVERSATION_FLOWS))
       
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
       const options = {
         action: 'create',
         name: 'Test Flow'
       }
       
-      await expect(command.execute(options)).rejects.toThrow('Invalid flow definition')
+      await expect(command.execute(options)).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Invalid flow definition'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 
@@ -234,9 +258,17 @@ describe('FlowCommand', () => {
     it('should handle API errors during list', async () => {
       mockApiClient.get.mockRejectedValue(new ApiError('Service unavailable', 503, ENDPOINTS.CONVERSATION_FLOWS))
       
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
       const options = { action: 'list' }
       
-      await expect(command.execute(options)).rejects.toThrow('Service unavailable')
+      await expect(command.execute(options)).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Service unavailable'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 
@@ -327,12 +359,20 @@ describe('FlowCommand', () => {
     it('should handle API errors during execution', async () => {
       mockApiClient.post.mockRejectedValue(new ApiError('Flow not found', 404))
       
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
       const options = {
         action: 'execute',
         flowId: 'nonexistent'
       }
       
-      await expect(command.execute(options)).rejects.toThrow('Flow not found')
+      await expect(command.execute(options)).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Flow not found'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 
@@ -424,7 +464,11 @@ describe('FlowCommand', () => {
   describe('File Operations', () => {
     it('should log verbose message when reading file', async () => {
       const flowDefinition = { name: 'Test', steps: [] }
-      mockFs.readFileSync.mockReturnValue(JSON.stringify(flowDefinition))
+      
+      // Mock fs.readFileSync properly
+      const mockReadFileSync = jest.fn().mockReturnValue(JSON.stringify(flowDefinition))
+      ;(fs as any).readFileSync = mockReadFileSync
+      
       mockApiClient.post.mockResolvedValue(MOCK_FLOW_RESPONSE)
       
       command.initialize({ verbose: true })
@@ -437,6 +481,7 @@ describe('FlowCommand', () => {
 
       await command.execute(options)
 
+      expect(mockReadFileSync).toHaveBeenCalledWith('test.json', 'utf8')
       expect(logVerboseSpy).toHaveBeenCalledWith('Reading flow definition from: test.json')
     })
   })
@@ -445,25 +490,49 @@ describe('FlowCommand', () => {
     it('should provide proper error context for create', async () => {
       mockApiClient.post.mockRejectedValue(new Error('Network error'))
       
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
       await expect(command.execute({ 
         action: 'create', 
         name: 'Test Flow' 
-      })).rejects.toThrow('Network error')
+      })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Network error'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
 
     it('should provide proper error context for list', async () => {
       mockApiClient.get.mockRejectedValue(new Error('Network error'))
       
-      await expect(command.execute({ action: 'list' })).rejects.toThrow('Network error')
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
+      await expect(command.execute({ action: 'list' })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Network error'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
 
     it('should provide proper error context for execute', async () => {
       mockApiClient.post.mockRejectedValue(new Error('Network error'))
       
+      const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+        throw new Error('process.exit')
+      })
+      
       await expect(command.execute({ 
         action: 'execute', 
         flowId: 'flow_123' 
-      })).rejects.toThrow('Network error')
+      })).rejects.toThrow('process.exit')
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Network error'))
+      expect(mockExit).toHaveBeenCalledWith(1)
+      
+      mockExit.mockRestore()
     })
   })
 

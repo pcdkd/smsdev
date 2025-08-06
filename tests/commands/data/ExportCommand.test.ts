@@ -140,20 +140,20 @@ class TestableExportCommand extends ExportCommand {
       // Save or display data
       if (options.output) {
         try {
-          const outputPath = this.mockFs.path.resolve(options.output)
-          const outputDir = this.mockFs.path.dirname(outputPath)
+          const outputPath = this.mockFs.resolve(options.output)
+          const outputDir = this.mockFs.dirname(outputPath)
 
-          if (!this.mockFs.fs.existsSync(outputDir)) {
-            this.mockFs.fs.mkdirSync(outputDir, { recursive: true })
+          if (!this.mockFs.existsSync(outputDir)) {
+            this.mockFs.mkdirSync(outputDir, { recursive: true })
             if (this.verbose) {
               this.logVerbose(`Created output directory: ${outputDir}`)
             }
           }
 
           const content = typeof data === 'string' ? data : JSON.stringify(data, null, 2)
-          this.mockFs.fs.writeFileSync(outputPath, content, 'utf8')
+          this.mockFs.writeFileSync(outputPath, content, 'utf8')
 
-          const stats = this.mockFs.fs.statSync(outputPath)
+          const stats = this.mockFs.statSync(outputPath)
           const sizeKB = Math.round(stats.size / 1024)
 
           console.log(`✅ Export saved to: ${outputPath}`)
@@ -335,7 +335,7 @@ describe('ExportCommand', () => {
 
       await command.execute(options)
 
-      expect(mockFs.fs.writeFileSync).toHaveBeenCalledWith(
+      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
         '/resolved/messages.json',
         JSON.stringify(MOCK_MESSAGES_EXPORT, null, 2),
         'utf8'
@@ -355,7 +355,7 @@ describe('ExportCommand', () => {
 
       await command.execute(options)
 
-      expect(mockFs.fs.mkdirSync).toHaveBeenCalledWith('/mock/dir', { recursive: true })
+      expect(mockFs.mkdirSync).toHaveBeenCalledWith('/mock/dir', { recursive: true })
     })
 
     it('should handle CSV format export', async () => {
@@ -369,7 +369,7 @@ describe('ExportCommand', () => {
 
       await command.execute(options)
 
-      expect(mockFs.fs.writeFileSync).toHaveBeenCalledWith(
+      expect(mockFs.writeFileSync).toHaveBeenCalledWith(
         '/resolved/messages.csv',
         'csv,data,here',
         'utf8'

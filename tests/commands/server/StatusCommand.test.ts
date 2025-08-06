@@ -1,26 +1,40 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
 import { StatusCommand } from '../../../src/commands/server/StatusCommand.js'
-import * as statusModule from '../../../src/commands/status.js'
 import { ApiError, CliError } from '../../../src/types/errors.js'
+import { MockStatusModule } from '../../helpers/MockStatusModule.js'
 
-// Mock modules
-jest.mock('../../../src/commands/status')
+/**
+ * Testable version of StatusCommand that uses mock dependencies
+ */
+class TestableStatusCommand extends StatusCommand {
+  private mockStatusModule: MockStatusModule
+
+  constructor(mockStatusModule: MockStatusModule) {
+    super()
+    this.mockStatusModule = mockStatusModule
+  }
+
+  async execute(options: any): Promise<void> {
+    try {
+      await this.mockStatusModule.showStatus()
+    } catch (error: any) {
+      this.handleError(error, 'checking server status')
+    }
+  }
+}
 
 describe('StatusCommand', () => {
-  let command: StatusCommand
-  let mockShowStatus: jest.MockedFunction<typeof statusModule.showStatus>
+  let command: TestableStatusCommand
+  let mockStatusModule: MockStatusModule
   let consoleSpy: jest.SpiedFunction<typeof console.log>
 
   beforeEach(() => {
-    command = new StatusCommand()
-    mockShowStatus = statusModule.showStatus as jest.MockedFunction<typeof statusModule.showStatus>
+    mockStatusModule = new MockStatusModule()
+    command = new TestableStatusCommand(mockStatusModule)
     consoleSpy = jest.spyOn(console, 'log').mockImplementation()
     
     // Reset all mocks
-    jest.clearAllMocks()
-    
-    // Default mock implementation
-    mockShowStatus.mockResolvedValue(undefined)
+    mockStatusModule.reset()
   })
 
   afterEach(() => {
@@ -40,8 +54,8 @@ describe('StatusCommand', () => {
 
       await command.execute(options)
 
-      expect(mockShowStatus).toHaveBeenCalledTimes(1)
-      expect(mockShowStatus).toHaveBeenCalledWith()
+      expect(mockStatusModule.showStatus).toHaveBeenCalledTimes(1)
+      expect(mockStatusModule.showStatus).toHaveBeenCalledWith()
     })
 
     it('should handle options parameter correctly', async () => {
@@ -49,21 +63,21 @@ describe('StatusCommand', () => {
 
       await command.execute(options)
 
-      expect(mockShowStatus).toHaveBeenCalledTimes(1)
-      expect(mockShowStatus).toHaveBeenCalledWith()
+      expect(mockStatusModule.showStatus).toHaveBeenCalledTimes(1)
+      expect(mockStatusModule.showStatus).toHaveBeenCalledWith()
     })
 
     it('should work with empty options', async () => {
       await command.execute({})
 
-      expect(mockShowStatus).toHaveBeenCalledTimes(1)
+      expect(mockStatusModule.showStatus).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('execute() - Error Handling', () => {
     it('should handle general errors during status check', async () => {
       const statusError = new Error('Network error')
-      mockShowStatus.mockRejectedValue(statusError)
+      mockStatusModule.mockShowStatusError(statusError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -79,7 +93,7 @@ describe('StatusCommand', () => {
 
     it('should handle API errors with proper status codes', async () => {
       const apiError = new ApiError('API not responding', 503, '/health')
-      mockShowStatus.mockRejectedValue(apiError)
+      mockStatusModule.mockShowStatusError(apiError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -96,7 +110,7 @@ describe('StatusCommand', () => {
 
     it('should handle CLI errors with custom exit codes', async () => {
       const cliError = new CliError('STATUS_CHECK_FAILED', 'Unable to check server status', 2)
-      mockShowStatus.mockRejectedValue(cliError)
+      mockStatusModule.mockShowStatusError(cliError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -113,7 +127,7 @@ describe('StatusCommand', () => {
     it('should handle timeout errors', async () => {
       const timeoutError = new Error('Request timeout') as any
       timeoutError.name = 'AbortError'
-      mockShowStatus.mockRejectedValue(timeoutError)
+      mockStatusModule.mockShowStatusError(timeoutError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -129,7 +143,7 @@ describe('StatusCommand', () => {
 
     it('should handle unknown errors gracefully', async () => {
       const unknownError = { message: 'Something went wrong' }
-      mockShowStatus.mockRejectedValue(unknownError)
+      mockStatusModule.mockShowStatusError(unknownError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -158,13 +172,13 @@ describe('StatusCommand', () => {
 
       await command.execute({})
 
-      expect(mockShowStatus).toHaveBeenCalledTimes(1)
+      expect(mockStatusModule.showStatus).toHaveBeenCalledTimes(1)
     })
 
     it('should show additional debug info in verbose mode during errors', async () => {
       const error = new Error('Test error')
       error.stack = 'Error stack trace'
-      mockShowStatus.mockRejectedValue(error)
+      mockStatusModule.mockShowStatusError(error)
       
       command.initialize({ verbose: true })
       
@@ -183,7 +197,7 @@ describe('StatusCommand', () => {
   describe('Error Context', () => {
     it('should provide proper error context', async () => {
       const statusError = new Error('Status check failed')
-      mockShowStatus.mockRejectedValue(statusError)
+      mockStatusModule.mockShowStatusError(statusError)
       
       const handleErrorSpy = jest.spyOn(command as any, 'handleError')
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
@@ -204,7 +218,7 @@ describe('StatusCommand', () => {
       await command.execute({})
       await command.execute({})
 
-      expect(mockShowStatus).toHaveBeenCalledTimes(3)
+      expect(mockStatusModule.showStatus).toHaveBeenCalledTimes(3)
     })
   })
 

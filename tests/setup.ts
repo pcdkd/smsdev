@@ -5,6 +5,12 @@ beforeAll(() => {
   // Suppress console.log during tests unless explicitly needed
   jest.spyOn(console, 'log').mockImplementation(() => {})
   jest.spyOn(console, 'warn').mockImplementation(() => {})
+  jest.spyOn(console, 'error').mockImplementation(() => {})
+  
+  // Mock process.exit to prevent tests from actually exiting
+  const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
+    throw new Error('process.exit() was called')
+  })
   
   // Mock ora spinner to prevent spinner output during tests
   jest.mock('ora', () => {

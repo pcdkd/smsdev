@@ -5,14 +5,22 @@ export class MockApiClient {
   post = jest.fn() 
   put = jest.fn()
   delete = jest.fn()
+  setBaseUrl = jest.fn()
+  getBaseUrl = jest.fn()
+  healthCheck = jest.fn()
   
-  constructor(public baseUrl: string = 'http://localhost:4001') {}
+  constructor(public baseUrl: string = 'http://localhost:4001') {
+    this.getBaseUrl.mockReturnValue(this.baseUrl)
+  }
   
   reset() {
     this.get.mockReset()
     this.post.mockReset()
     this.put.mockReset()
     this.delete.mockReset()
+    this.setBaseUrl.mockReset()
+    this.getBaseUrl.mockReset()
+    this.healthCheck.mockReset()
   }
   
   // Helper methods for common mock responses

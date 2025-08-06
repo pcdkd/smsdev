@@ -21,7 +21,7 @@ const DEFAULT_CONFIG = {
 }
 
 describe('Configuration Utility', () => {
-  const testConfigPath = join(process.cwd(), 'test-config.js')
+  const testConfigPath = join(process.cwd(), 'test-config.json')
   
   beforeEach(() => {
     // Clean up any existing test files
@@ -50,14 +50,14 @@ describe('Configuration Utility', () => {
       expect(config).toMatchObject(DEFAULT_CONFIG)
     })
 
-    it('should load JavaScript configuration file', () => {
+    it('should load JSON configuration file', () => {
       const testConfig = {
         apiPort: 5001,
         uiPort: 5000,
         webhookUrl: 'http://test.com/webhook'
       }
       
-      writeFileSync(testConfigPath, `module.exports = ${JSON.stringify(testConfig, null, 2)}`)
+      writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2))
       
       const config = loadConfig({ configFile: testConfigPath })
       expect(config.apiPort).toBe(5001)
@@ -84,7 +84,7 @@ describe('Configuration Utility', () => {
         uiPort: 8000
       }
       
-      writeFileSync(testConfigPath, `module.exports = ${JSON.stringify(testConfig, null, 2)}`)
+      writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2))
       
       const cliOptions: ConfigOptions = {
         configFile: testConfigPath,
@@ -155,7 +155,7 @@ describe('Configuration Utility', () => {
         uiPort: 99999
       }
       
-      writeFileSync(testConfigPath, `module.exports = ${JSON.stringify(testConfig, null, 2)}`)
+      writeFileSync(testConfigPath, JSON.stringify(testConfig, null, 2))
       
       // Should not throw an error, but may use defaults or skip invalid values
       expect(() => {

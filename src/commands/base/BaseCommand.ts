@@ -1,6 +1,14 @@
 import chalk from 'chalk'
 import ora, { Ora } from 'ora'
 import { ApiError, CliError, ValidationError } from '../../types/errors.js'
+import { 
+  Validator, 
+  ValidationResults, 
+  ValidationContext, 
+  ValidationSchema,
+  ValidationRule,
+  ValidationError as ValidationFrameworkError
+} from '../../validation/index.js'
 
 /**
  * Options that all commands receive
@@ -156,7 +164,130 @@ export abstract class BaseCommand {
   }
   
   /**
-   * Validate required options
+   * Validate command options using the validation framework
+   */
+  protected async validateOptions(options: CommandOptions, schema?: ValidationSchema): Promise<void> {
+    if (!schema) {
+      return
+    }
+
+    const validator = new Validator()
+    
+    // Add rules from schema to validator
+    for (const [fieldName, fieldSchema] of Object.entries(schema)) {
+      for (const rule of fieldSchema.rules) {
+        validator.addRule(fieldName, rule)
+      }
+    }
+
+    try {
+      const results = await validator.validateSchema(options, schema)
+      
+      if (!results.isValid) {
+        // Convert validation framework errors to CLI errors
+        const errorMessages: string[] = []
+        
+        for (const [field, result] of Object.entries(results.fieldResults)) {
+          if (!result.isValid) {
+            errorMessages.push(`${field}: ${result.error}`)
+            
+            if (result.suggestions && result.suggestions.length > 0) {
+              errorMessages.push(`  Suggestions: ${result.suggestions.join(', ')}`)
+            }
+          }
+        }
+        
+        throw new ValidationError(errorMessages.join('\n'))
+      }
+      
+      // Update options with sanitized values
+      for (const [field, result] of Object.entries(results.fieldResults)) {
+        if (result.sanitizedValue !== undefined) {
+          options[field] = result.sanitizedValue
+        }
+      }
+      
+    } catch (error) {
+      if (error instanceof ValidationFrameworkError) {
+        throw new ValidationError(error.message, error.field)
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Validate a single field using the validation framework
+   */
+  protected async validateField(fieldName: string, value: any, rules: ValidationRule<any>[]): Promise<any> {
+    const validator = new Validator()
+    
+    for (const rule of rules) {
+      validator.addRule(fieldName, rule)
+    }
+    
+    try {
+      const result = await validator.validateField(fieldName, value)
+      
+      if (!result.isValid) {
+        const errorMsg = result.error || 'Validation failed'
+        const suggestions = result.suggestions ? ` Suggestions: ${result.suggestions.join(', ')}` : ''
+        
+        throw new ValidationError(`${fieldName}: ${errorMsg}${suggestions}`, fieldName)
+      }
+      
+      return result.sanitizedValue !== undefined ? result.sanitizedValue : value
+      
+    } catch (error) {
+      if (error instanceof ValidationFrameworkError) {
+        throw new ValidationError(error.message, error.field)
+      }
+      throw error
+    }
+  }
+
+  /**
+   * Quick validation helper for common field types
+   */
+  protected async validatePhoneNumber(value: string, strict = false): Promise<string> {
+    const rule = strict ? 'e164PhoneNumberRule' : 'flexiblePhoneNumberRule'
+    const { flexiblePhoneNumberRule, e164PhoneNumberRule } = await import('../../validation/rules/phoneNumber.js')
+    
+    return this.validateField('phone', value, [strict ? e164PhoneNumberRule : flexiblePhoneNumberRule])
+  }
+
+  protected async validateFilePath(value: string, mustExist = false, allowedExtensions?: string[]): Promise<string> {
+    const { createFilePathRule } = await import('../../validation/rules/filePath.js')
+    
+    return this.validateField('file', value, [createFilePathRule({ 
+      mustExist, 
+      allowedExtensions 
+    })])
+  }
+
+  protected async validateUrl(value: string, requireHttps = false): Promise<string> {
+    const { createUrlRule } = await import('../../validation/rules/url.js')
+    
+    return this.validateField('url', value, [createUrlRule({ requireHttps })])
+  }
+
+  protected async validatePort(value: number | string): Promise<number> {
+    const { portRule } = await import('../../validation/rules/numeric.js')
+    
+    return this.validateField('port', value, [portRule])
+  }
+
+  protected async validateDate(value: string, allowPast = true, allowFuture = true): Promise<Date> {
+    const { createDateRule } = await import('../../validation/rules/date.js')
+    
+    return this.validateField('date', value, [createDateRule({
+      format: 'iso8601',
+      allowPast,
+      allowFuture
+    })])
+  }
+
+  /**
+   * Validate required options (legacy method - prefer validateOptions)
    */
   protected validateRequiredOptions(options: CommandOptions, required: string[]): void {
     const missing = required.filter(key => !options[key])

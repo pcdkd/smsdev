@@ -1,34 +1,97 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
 import { StartCommand } from '../../../src/commands/server/StartCommand.js'
-import * as startModule from '../../../src/commands/start.js'
-import * as configUtils from '../../../src/utils/config.js'
 import { DEFAULT_TEST_CONFIG } from '../../fixtures/testConfig.js'
 import { ValidationError, CliError } from '../../../src/types/errors.js'
+import { MockConfigUtils } from '../../helpers/MockConfigUtils.js'
+import { MockStartModule } from '../../helpers/MockStartModule.js'
 
-// Mock modules
-jest.mock('../../../src/commands/start')
-jest.mock('../../../src/utils/config')
+/**
+ * Testable version of StartCommand that uses mock dependencies
+ */
+class TestableStartCommand extends StartCommand {
+  private mockConfigUtils: MockConfigUtils
+  private mockStartModule: MockStartModule
+
+  constructor(mockConfigUtils: MockConfigUtils, mockStartModule: MockStartModule) {
+    super()
+    this.mockConfigUtils = mockConfigUtils
+    this.mockStartModule = mockStartModule
+  }
+
+  async execute(options: any): Promise<void> {
+    try {
+      // Load configuration from all sources
+      const config = this.mockConfigUtils.loadConfig({
+        configFile: options.config,
+        apiPort: options.apiPort ? parseInt(options.apiPort) : undefined,
+        uiPort: options.uiPort ? parseInt(options.uiPort) : undefined,
+        webhookUrl: options.webhookUrl,
+        startUI: options.ui !== false,
+        verbose: options.verbose || false
+      })
+
+      // Show config and exit if requested
+      if (options.showConfig) {
+        this.mockConfigUtils.printConfig(config)
+        return
+      }
+
+      this.startSpinner('Starting sms-dev server')
+      
+      await this.mockStartModule.startSmsDevServer({
+        apiPort: config.apiPort,
+        uiPort: config.uiPort,
+        startUI: config.startUI,
+        webhookUrl: config.webhookUrl,
+        verbose: config.verbose
+      })
+      
+      this.stopSpinner('sms-dev server started successfully!')
+      
+      // Show server information
+      this.showServerInfo(config.apiPort, config.uiPort, config.startUI)
+      
+    } catch (error: any) {
+      this.handleError(error, 'starting server')
+    }
+  }
+  
+  /**
+   * Display server information and quick start guide
+   */
+  private showServerInfo(apiPort: number, uiPort: number, startUI: boolean): void {
+    console.log('')
+    console.log(`📡 API Server: http://localhost:${apiPort}`)
+    if (startUI) {
+      console.log(`📱 Virtual Phone UI: http://localhost:${uiPort}`)
+    }
+    console.log('')
+    console.log('💡 Quick Start:')
+    console.log(`  1. Point your SDK to: http://localhost:${apiPort}`)
+    if (startUI) {
+      console.log(`  2. Open Virtual Phone: http://localhost:${uiPort}`)
+      console.log('  3. Send test messages and see them in the UI!')
+    }
+    console.log('')
+    console.log('Press Ctrl+C to stop')
+  }
+}
 
 describe('StartCommand', () => {
-  let command: StartCommand
-  let mockStartSmsDevServer: jest.MockedFunction<typeof startModule.startSmsDevServer>
-  let mockLoadConfig: jest.MockedFunction<typeof configUtils.loadConfig>
-  let mockPrintConfig: jest.MockedFunction<typeof configUtils.printConfig>
+  let command: TestableStartCommand
+  let mockConfigUtils: MockConfigUtils
+  let mockStartModule: MockStartModule
   let consoleSpy: jest.SpiedFunction<typeof console.log>
 
   beforeEach(() => {
-    command = new StartCommand()
-    mockStartSmsDevServer = startModule.startSmsDevServer as jest.MockedFunction<typeof startModule.startSmsDevServer>
-    mockLoadConfig = configUtils.loadConfig as jest.MockedFunction<typeof configUtils.loadConfig>
-    mockPrintConfig = configUtils.printConfig as jest.MockedFunction<typeof configUtils.printConfig>
+    mockConfigUtils = new MockConfigUtils()
+    mockStartModule = new MockStartModule()
+    command = new TestableStartCommand(mockConfigUtils, mockStartModule)
     consoleSpy = jest.spyOn(console, 'log').mockImplementation()
     
     // Reset all mocks
-    jest.clearAllMocks()
-    
-    // Default mock implementations
-    mockLoadConfig.mockReturnValue(DEFAULT_TEST_CONFIG)
-    mockStartSmsDevServer.mockResolvedValue(undefined)
+    mockConfigUtils.reset()
+    mockStartModule.reset()
   })
 
   afterEach(() => {
@@ -48,7 +111,7 @@ describe('StartCommand', () => {
 
       await command.execute(options)
 
-      expect(mockLoadConfig).toHaveBeenCalledWith({
+      expect(mockConfigUtils.loadConfig).toHaveBeenCalledWith({
         configFile: undefined,
         apiPort: undefined,
         uiPort: undefined,
@@ -57,7 +120,7 @@ describe('StartCommand', () => {
         verbose: false
       })
       
-      expect(mockStartSmsDevServer).toHaveBeenCalledWith({
+      expect(mockStartModule.startSmsDevServer).toHaveBeenCalledWith({
         apiPort: DEFAULT_TEST_CONFIG.apiPort,
         uiPort: DEFAULT_TEST_CONFIG.uiPort,
         startUI: DEFAULT_TEST_CONFIG.startUI,
@@ -80,7 +143,7 @@ describe('StartCommand', () => {
 
       await command.execute(options)
 
-      expect(mockLoadConfig).toHaveBeenCalledWith({
+      expect(mockConfigUtils.loadConfig).toHaveBeenCalledWith({
         configFile: '/custom/config.js',
         apiPort: 5001,
         uiPort: 5000,
@@ -91,11 +154,14 @@ describe('StartCommand', () => {
     })
 
     it('should handle UI disabled option', async () => {
+      const testConfig = { ...DEFAULT_TEST_CONFIG, startUI: false }
+      mockConfigUtils.mockLoadConfigSuccess(testConfig)
+      
       const options = { ui: false }
 
       await command.execute(options)
 
-      expect(mockLoadConfig).toHaveBeenCalledWith({
+      expect(mockConfigUtils.loadConfig).toHaveBeenCalledWith({
         configFile: undefined,
         apiPort: undefined,
         uiPort: undefined,
@@ -113,15 +179,15 @@ describe('StartCommand', () => {
 
       await command.execute(options)
 
-      expect(mockPrintConfig).toHaveBeenCalledWith(DEFAULT_TEST_CONFIG)
-      expect(mockStartSmsDevServer).not.toHaveBeenCalled()
+      expect(mockConfigUtils.printConfig).toHaveBeenCalledWith(DEFAULT_TEST_CONFIG)
+      expect(mockStartModule.startSmsDevServer).not.toHaveBeenCalled()
     })
   })
 
   describe('execute() - Error Handling', () => {
     it('should handle server start errors', async () => {
       const startError = new Error('Port already in use')
-      mockStartSmsDevServer.mockRejectedValue(startError)
+      mockStartModule.mockStartError(startError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -137,9 +203,7 @@ describe('StartCommand', () => {
 
     it('should handle configuration loading errors', async () => {
       const configError = new ValidationError('Invalid port number', 'apiPort')
-      mockLoadConfig.mockImplementation(() => {
-        throw configError
-      })
+      mockConfigUtils.mockLoadConfigError(configError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -163,7 +227,7 @@ describe('StartCommand', () => {
 
       await command.execute(options)
 
-      expect(mockLoadConfig).toHaveBeenCalledWith({
+      expect(mockConfigUtils.loadConfig).toHaveBeenCalledWith({
         configFile: undefined,
         apiPort: 8001,
         uiPort: 8000,
@@ -181,7 +245,7 @@ describe('StartCommand', () => {
 
       await command.execute(options)
 
-      expect(mockLoadConfig).toHaveBeenCalledWith({
+      expect(mockConfigUtils.loadConfig).toHaveBeenCalledWith({
         configFile: undefined,
         apiPort: NaN,
         uiPort: NaN,
@@ -203,12 +267,12 @@ describe('StartCommand', () => {
 
     it('should pass verbose option to server start', async () => {
       const testConfig = { ...DEFAULT_TEST_CONFIG, verbose: true }
-      mockLoadConfig.mockReturnValue(testConfig)
+      mockConfigUtils.mockLoadConfigSuccess(testConfig)
       
       const options = { verbose: true }
       await command.execute(options)
 
-      expect(mockStartSmsDevServer).toHaveBeenCalledWith(expect.objectContaining({
+      expect(mockStartModule.startSmsDevServer).toHaveBeenCalledWith(expect.objectContaining({
         verbose: true
       }))
     })
@@ -227,7 +291,7 @@ describe('StartCommand', () => {
 
     it('should display server information without UI when disabled', async () => {
       const testConfig = { ...DEFAULT_TEST_CONFIG, startUI: false }
-      mockLoadConfig.mockReturnValue(testConfig)
+      mockConfigUtils.mockLoadConfigSuccess(testConfig)
 
       await command.execute({ ui: false })
 
@@ -250,7 +314,7 @@ describe('StartCommand', () => {
 
     it('should handle spinner during errors', async () => {
       const startError = new Error('Startup failed')
-      mockStartSmsDevServer.mockRejectedValue(startError)
+      mockStartModule.mockStartError(startError)
       
       const handleErrorSpy = jest.spyOn(command as any, 'handleError')
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {

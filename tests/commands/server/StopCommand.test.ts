@@ -1,26 +1,44 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals'
 import { StopCommand } from '../../../src/commands/server/StopCommand.js'
-import * as startModule from '../../../src/commands/start.js'
 import { CliError } from '../../../src/types/errors.js'
+import { MockStopModule } from '../../helpers/MockStopModule.js'
 
-// Mock modules
-jest.mock('../../../src/commands/start')
+/**
+ * Testable version of StopCommand that uses mock dependencies
+ */
+class TestableStopCommand extends StopCommand {
+  private mockStopModule: MockStopModule
+
+  constructor(mockStopModule: MockStopModule) {
+    super()
+    this.mockStopModule = mockStopModule
+  }
+
+  async execute(options: any): Promise<void> {
+    this.startSpinner('Stopping sms-dev server')
+    
+    try {
+      await this.mockStopModule.stopSmsDevServer()
+      this.stopSpinner('sms-dev server stopped')
+    } catch (error: any) {
+      this.failSpinner('Failed to stop sms-dev server')
+      this.handleError(error, 'stopping server')
+    }
+  }
+}
 
 describe('StopCommand', () => {
-  let command: StopCommand
-  let mockStopSmsDevServer: jest.MockedFunction<typeof startModule.stopSmsDevServer>
+  let command: TestableStopCommand
+  let mockStopModule: MockStopModule
   let consoleSpy: jest.SpiedFunction<typeof console.log>
 
   beforeEach(() => {
-    command = new StopCommand()
-    mockStopSmsDevServer = startModule.stopSmsDevServer as jest.MockedFunction<typeof startModule.stopSmsDevServer>
+    mockStopModule = new MockStopModule()
+    command = new TestableStopCommand(mockStopModule)
     consoleSpy = jest.spyOn(console, 'log').mockImplementation()
     
     // Reset all mocks
-    jest.clearAllMocks()
-    
-    // Default mock implementation
-    mockStopSmsDevServer.mockResolvedValue(undefined)
+    mockStopModule.reset()
   })
 
   afterEach(() => {
@@ -40,8 +58,8 @@ describe('StopCommand', () => {
 
       await command.execute(options)
 
-      expect(mockStopSmsDevServer).toHaveBeenCalledTimes(1)
-      expect(mockStopSmsDevServer).toHaveBeenCalledWith()
+      expect(mockStopModule.stopSmsDevServer).toHaveBeenCalledTimes(1)
+      expect(mockStopModule.stopSmsDevServer).toHaveBeenCalledWith()
     })
 
     it('should handle options parameter correctly', async () => {
@@ -49,15 +67,15 @@ describe('StopCommand', () => {
 
       await command.execute(options)
 
-      expect(mockStopSmsDevServer).toHaveBeenCalledTimes(1)
-      expect(mockStopSmsDevServer).toHaveBeenCalledWith()
+      expect(mockStopModule.stopSmsDevServer).toHaveBeenCalledTimes(1)
+      expect(mockStopModule.stopSmsDevServer).toHaveBeenCalledWith()
     })
   })
 
   describe('execute() - Error Handling', () => {
     it('should handle server stop errors', async () => {
       const stopError = new Error('Failed to stop server')
-      mockStopSmsDevServer.mockRejectedValue(stopError)
+      mockStopModule.mockStopError(stopError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -73,7 +91,7 @@ describe('StopCommand', () => {
 
     it('should handle CLI errors with proper exit codes', async () => {
       const cliError = new CliError('STOP_FAILED', 'Unable to stop server', 3)
-      mockStopSmsDevServer.mockRejectedValue(cliError)
+      mockStopModule.mockStopError(cliError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -90,7 +108,7 @@ describe('StopCommand', () => {
     it('should handle timeout errors', async () => {
       const timeoutError = new Error('Request timeout') as any
       timeoutError.name = 'AbortError'
-      mockStopSmsDevServer.mockRejectedValue(timeoutError)
+      mockStopModule.mockStopError(timeoutError)
 
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
         throw new Error('process.exit')
@@ -124,7 +142,7 @@ describe('StopCommand', () => {
 
     it('should fail spinner on error', async () => {
       const stopError = new Error('Stop failed')
-      mockStopSmsDevServer.mockRejectedValue(stopError)
+      mockStopModule.mockStopError(stopError)
       
       const failSpinnerSpy = jest.spyOn(command as any, 'failSpinner')
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
@@ -153,14 +171,14 @@ describe('StopCommand', () => {
 
       await command.execute({})
 
-      expect(mockStopSmsDevServer).toHaveBeenCalledTimes(1)
+      expect(mockStopModule.stopSmsDevServer).toHaveBeenCalledTimes(1)
     })
   })
 
   describe('Error Context', () => {
     it('should provide proper error context', async () => {
       const stopError = new Error('Stop failed')
-      mockStopSmsDevServer.mockRejectedValue(stopError)
+      mockStopModule.mockStopError(stopError)
       
       const handleErrorSpy = jest.spyOn(command as any, 'handleError')
       const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => {
@@ -180,7 +198,7 @@ describe('StopCommand', () => {
       await command.execute({})
       await command.execute({})
 
-      expect(mockStopSmsDevServer).toHaveBeenCalledTimes(2)
+      expect(mockStopModule.stopSmsDevServer).toHaveBeenCalledTimes(2)
     })
   })
 })

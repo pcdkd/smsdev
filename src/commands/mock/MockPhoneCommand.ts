@@ -4,6 +4,7 @@ import { ApiClient } from '../../services/ApiClient.js'
 import { ValidationError } from '../../types/errors.js'
 import { ENDPOINTS, MOCK_PHONE_TYPES } from '../../constants.js'
 import { MockPhone, MockPhonesResponse } from '../../types/api.js'
+import { CommandValidationSchemas } from '../../validation/index.js'
 
 /**
  * Options for the mock-phone command
@@ -35,6 +36,9 @@ export class MockPhoneCommand extends BaseCommand {
   }
 
   async execute(options: MockPhoneOptions): Promise<void> {
+    // Validate all options with comprehensive validation
+    await this.validateOptions(options, CommandValidationSchemas.mockPhone)
+    
     const action = options.action
 
     switch (action) {
@@ -56,23 +60,27 @@ export class MockPhoneCommand extends BaseCommand {
    * Create a new mock phone number
    */
   private async createMockPhone(options: MockPhoneOptions): Promise<void> {
+    // Conditional validation for create action
     if (!options.phone) {
       throw new ValidationError('Phone number is required for create action', 'phone')
     }
     
-    // Validate phone type
-    if (options.type && !MOCK_PHONE_TYPES.includes(options.type as any)) {
-      throw new ValidationError(
-        `Invalid phone type. Must be one of: ${MOCK_PHONE_TYPES.join(', ')}`,
-        'type'
-      )
+    // Additional validation for phone number format
+    const sanitizedPhone = await this.validatePhoneNumber(options.phone, false)
+    
+    // Name validation if provided
+    if (options.name) {
+      const { createStringRule } = await import('../../validation/rules/string.js')
+      options.name = await this.validateField('name', options.name, [
+        createStringRule({ minLength: 1, maxLength: 100, trim: true })
+      ])
     }
 
     try {
       this.startSpinner('Creating mock phone')
       
       const phone = await this.apiClient.post<MockPhone>(ENDPOINTS.MOCK_PHONES, {
-        phone: options.phone,
+        phone: sanitizedPhone,
         name: options.name,
         type: options.type || 'test',
         capabilities: { sms: true }
@@ -116,19 +124,23 @@ export class MockPhoneCommand extends BaseCommand {
    * Delete a mock phone number
    */
   private async deleteMockPhone(options: MockPhoneOptions): Promise<void> {
+    // Conditional validation for delete action
     if (!options.phone) {
       throw new ValidationError('Phone number is required for delete action', 'phone')
     }
+    
+    // Validate and sanitize phone number
+    const sanitizedPhone = await this.validatePhoneNumber(options.phone, false)
 
     try {
       this.startSpinner('Finding mock phone')
       
       // First find the phone ID
       const { phones } = await this.apiClient.get<MockPhonesResponse>(ENDPOINTS.MOCK_PHONES)
-      const phone = phones.find((p: MockPhone) => p.phone === options.phone)
+      const phone = phones.find((p: MockPhone) => p.phone === sanitizedPhone)
       
       if (!phone) {
-        throw new ValidationError(`Mock phone ${options.phone} not found`)
+        throw new ValidationError(`Mock phone ${sanitizedPhone} not found`)
       }
       
       this.startSpinner('Deleting mock phone')
@@ -136,7 +148,7 @@ export class MockPhoneCommand extends BaseCommand {
       await this.apiClient.delete(`${ENDPOINTS.MOCK_PHONES}/${phone.id}`)
       
       this.stopSpinner()
-      this.logSuccess(`Mock phone ${options.phone} deleted`)
+      this.logSuccess(`Mock phone ${sanitizedPhone} deleted`)
     } catch (error: any) {
       this.stopSpinner()
       this.handleError(error, 'deleting mock phone')

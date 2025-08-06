@@ -5,17 +5,26 @@ import chalk from 'chalk'
 import ora from 'ora'
 import fs from 'fs'
 import path from 'path'
+import { fileURLToPath } from 'url'
 import { startSmsDevServer } from './commands/start.js'
 import { stopSmsDevServer } from './commands/stop.js'
 import { showStatus } from './commands/status.js'
 import { loadConfig, generateSampleConfig, printConfig } from './utils/config.js'
+
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// Load version from package.json
+const packageJsonPath = path.join(__dirname, '../package.json')
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
 
 const program = new Command()
 
 program
   .name('sms-dev')
   .description('Local development tool for SMS applications - the Mailtrap for SMS')
-  .version('1.0.0')
+  .version(packageJson.version)
 
 program
   .command('start')

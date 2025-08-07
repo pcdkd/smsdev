@@ -1,388 +1,251 @@
 /**
- * Main validation module for SMS-Dev CLI
- * Exports all validation functionality and provides convenience functions
+ * Simplified validation for SMS-Dev CLI
+ * Three core validation types that cover all CLI needs
  */
 
-// Core validation framework
-export * from './types.js'
-export * from './Validator.js'
+export interface ValidationError {
+  field: string
+  value: any
+  message: string
+}
 
-// All validation rules
-export * from './rules/index.js'
+export class ValidationResult {
+  constructor(
+    public isValid: boolean,
+    public errors: ValidationError[] = [],
+    public value?: any
+  ) {}
 
-// Convenience imports for common patterns
-import { Validator } from './Validator.js'
-import { ValidationSchema, ValidationContext } from './types.js'
-import {
-  // Phone number validation
-  e164PhoneNumberRule,
-  flexiblePhoneNumberRule,
-  createPhoneNumberRule,
-  
-  // File path validation
-  fileExistsRule,
-  outputFileRule,
-  createFilePathRule,
-  noDirectoryTraversalRule,
-  
-  // URL validation
-  urlFormatRule,
-  httpsOnlyRule,
-  webhookUrlRule,
-  createUrlRule,
-  
-  // Numeric validation
-  integerRule,
-  portRule,
-  rangeRule,
-  createIntegerRule,
-  
-  // String validation
-  nonEmptyStringRule,
-  stringLengthRule,
-  safeFilenameRule,
-  uuidRule,
-  simpleIdRule,
-  createStringRule,
-  
-  // Date validation
-  iso8601DateRule,
-  dateRangeRule,
-  createDateRule,
-  
-  // Enum validation
-  exportFormatRule,
-  exportTypeRule,
-  mockPhoneActionRule,
-  flowActionRule,
-  performanceActionRule,
-  createEnumRule,
-  
-  // JSON validation
-  jsonParseRule,
-  jsonFileRule,
-  flowJsonSchemaRule,
-  configJsonSchemaRule
-} from './rules/index.js'
-
-/**
- * Pre-configured validator instances for common use cases
- */
-export class ValidationPresets {
-  /**
-   * Validator for phone numbers (flexible format with E.164 conversion)
-   */
-  static phoneNumber(): Validator {
-    const validator = new Validator()
-    validator.addRule('phone', flexiblePhoneNumberRule)
-    return validator
+  static success(value?: any): ValidationResult {
+    return new ValidationResult(true, [], value)
   }
 
-  /**
-   * Validator for strict E.164 phone numbers
-   */
-  static strictPhoneNumber(): Validator {
-    const validator = new Validator()
-    validator.addRule('phone', e164PhoneNumberRule)
-    return validator
+  static error(field: string, value: any, message: string): ValidationResult {
+    return new ValidationResult(false, [{ field, value, message }])
   }
 
-  /**
-   * Validator for file paths that must exist
-   */
-  static existingFile(allowedExtensions?: string[]): Validator {
-    const validator = new Validator()
-    validator.addRule('file', noDirectoryTraversalRule)
-    validator.addRule('file', createFilePathRule({
-      mustExist: true,
-      allowedExtensions,
-      securityCheck: false // Already added above
-    }))
-    return validator
-  }
-
-  /**
-   * Validator for output file paths
-   */
-  static outputFile(allowedExtensions?: string[]): Validator {
-    const validator = new Validator()
-    validator.addRule('file', noDirectoryTraversalRule)
-    validator.addRule('file', createFilePathRule({
-      requireWritable: true,
-      allowedExtensions,
-      securityCheck: false // Already added above
-    }))
-    return validator
-  }
-
-  /**
-   * Validator for webhook URLs
-   */
-  static webhookUrl(requireHttps = true): Validator {
-    const validator = new Validator()
-    validator.addRule('url', createUrlRule({
-      requireHttps,
-      requirePath: true,
-      allowAccessibilityCheck: false // Can be enabled separately
-    }))
-    return validator
-  }
-
-  /**
-   * Validator for port numbers
-   */
-  static port(): Validator {
-    const validator = new Validator()
-    validator.addRule('port', portRule)
-    return validator
-  }
-
-  /**
-   * Validator for ISO 8601 dates
-   */
-  static isoDate(allowPast = true, allowFuture = true): Validator {
-    const validator = new Validator()
-    validator.addRule('date', createDateRule({
-      format: 'iso8601',
-      allowPast,
-      allowFuture
-    }))
-    return validator
-  }
-
-  /**
-   * Validator for date ranges (from-date and to-date)
-   */
-  static dateRange(): Validator {
-    const validator = new Validator()
-    validator.addRule('fromDate', iso8601DateRule)
-    validator.addRule('toDate', iso8601DateRule)
-    validator.addRule('dateRange', dateRangeRule('fromDate', 'toDate'))
-    return validator
-  }
-
-  /**
-   * Validator for JSON flow definitions
-   */
-  static flowJson(): Validator {
-    const validator = new Validator()
-    validator.addRule('flow', jsonParseRule)
-    validator.addRule('flow', flowJsonSchemaRule)
-    return validator
-  }
-
-  /**
-   * Validator for configuration JSON
-   */
-  static configJson(): Validator {
-    const validator = new Validator()
-    validator.addRule('config', jsonParseRule)
-    validator.addRule('config', configJsonSchemaRule)
-    return validator
+  static errors(errors: ValidationError[]): ValidationResult {
+    return new ValidationResult(false, errors)
   }
 }
 
 /**
- * Validation schemas for each command
+ * Simple CLI validation utilities
  */
-export const CommandValidationSchemas = {
+export class CLIValidator {
+  
   /**
-   * Mock phone command validation
+   * Validate string inputs (covers: phone numbers, file paths, names, etc.)
    */
-  mockPhone: {
-    action: {
-      rules: [mockPhoneActionRule],
-      options: { required: false }
-    },
-    phone: {
-      rules: [flexiblePhoneNumberRule],
-      options: { 
-        required: false, // Conditional based on action
-        context: 'Required for create and delete actions'
+  static validateString(
+    field: string, 
+    value: any, 
+    options: {
+      required?: boolean
+      minLength?: number
+      maxLength?: number
+      pattern?: RegExp
+      enum?: string[]
+    } = {}
+  ): ValidationResult {
+    // Check if required
+    if (options.required && (value === undefined || value === null || value === '')) {
+      return ValidationResult.error(field, value, `${field} is required`)
+    }
+
+    // Allow empty for optional fields
+    if (!options.required && (value === undefined || value === null || value === '')) {
+      return ValidationResult.success(value)
+    }
+
+    // Convert to string
+    const str = String(value).trim()
+
+    // Length checks
+    if (options.minLength !== undefined && str.length < options.minLength) {
+      return ValidationResult.error(field, value, `${field} must be at least ${options.minLength} characters`)
+    }
+
+    if (options.maxLength !== undefined && str.length > options.maxLength) {
+      return ValidationResult.error(field, value, `${field} must be no more than ${options.maxLength} characters`)
+    }
+
+    // Pattern check (covers phone numbers, file paths, etc.)
+    if (options.pattern && !options.pattern.test(str)) {
+      return ValidationResult.error(field, value, `${field} format is invalid`)
+    }
+
+    // Enum check
+    if (options.enum && !options.enum.includes(str)) {
+      return ValidationResult.error(field, value, `${field} must be one of: ${options.enum.join(', ')}`)
+    }
+
+    return ValidationResult.success(str)
+  }
+
+  /**
+   * Validate numeric inputs (covers: ports, counts, timeouts, etc.)
+   */
+  static validateNumber(
+    field: string,
+    value: any,
+    options: {
+      required?: boolean
+      min?: number
+      max?: number
+      integer?: boolean
+    } = {}
+  ): ValidationResult {
+    // Check if required
+    if (options.required && (value === undefined || value === null || value === '')) {
+      return ValidationResult.error(field, value, `${field} is required`)
+    }
+
+    // Allow empty for optional fields
+    if (!options.required && (value === undefined || value === null || value === '')) {
+      return ValidationResult.success(value)
+    }
+
+    // Convert to number
+    const num = Number(value)
+
+    if (isNaN(num)) {
+      return ValidationResult.error(field, value, `${field} must be a valid number`)
+    }
+
+    // Integer check
+    if (options.integer && !Number.isInteger(num)) {
+      return ValidationResult.error(field, value, `${field} must be an integer`)
+    }
+
+    // Range checks
+    if (options.min !== undefined && num < options.min) {
+      return ValidationResult.error(field, value, `${field} must be at least ${options.min}`)
+    }
+
+    if (options.max !== undefined && num > options.max) {
+      return ValidationResult.error(field, value, `${field} must be no more than ${options.max}`)
+    }
+
+    return ValidationResult.success(num)
+  }
+
+  /**
+   * Validate structured inputs (covers: URLs, JSON, dates, etc.)
+   */
+  static validateStructured(
+    field: string,
+    value: any,
+    type: 'url' | 'json' | 'date' | 'email',
+    options: {
+      required?: boolean
+    } = {}
+  ): ValidationResult {
+    // Check if required
+    if (options.required && (value === undefined || value === null || value === '')) {
+      return ValidationResult.error(field, value, `${field} is required`)
+    }
+
+    // Allow empty for optional fields
+    if (!options.required && (value === undefined || value === null || value === '')) {
+      return ValidationResult.success(value)
+    }
+
+    const str = String(value).trim()
+
+    switch (type) {
+      case 'url':
+        try {
+          const url = new URL(str)
+          return ValidationResult.success(url.toString())
+        } catch {
+          return ValidationResult.error(field, value, `${field} must be a valid URL`)
+        }
+
+      case 'json':
+        try {
+          const parsed = JSON.parse(str)
+          return ValidationResult.success(parsed)
+        } catch {
+          return ValidationResult.error(field, value, `${field} must be valid JSON`)
+        }
+
+      case 'date':
+        const date = new Date(str)
+        if (isNaN(date.getTime())) {
+          return ValidationResult.error(field, value, `${field} must be a valid date`)
+        }
+        return ValidationResult.success(date)
+
+      case 'email':
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailPattern.test(str)) {
+          return ValidationResult.error(field, value, `${field} must be a valid email address`)
+        }
+        return ValidationResult.success(str)
+
+      default:
+        return ValidationResult.error(field, value, `Unknown validation type: ${type}`)
+    }
+  }
+
+  /**
+   * Common validation patterns for CLI inputs
+   */
+  static readonly PATTERNS = {
+    PHONE_NUMBER: /^\+?[\d\s\-\(\)]+$/,
+    FILE_PATH: /^[^\0]+$/,
+    PORT: /^\d+$/,
+    API_KEY: /^[a-zA-Z0-9_-]+$/
+  }
+
+  /**
+   * Convenience methods for common CLI validations
+   */
+  static validatePhoneNumber(field: string, value: any, required = false): ValidationResult {
+    return this.validateString(field, value, {
+      required,
+      pattern: this.PATTERNS.PHONE_NUMBER,
+      minLength: 10,
+      maxLength: 20
+    })
+  }
+
+  static validatePort(field: string, value: any, required = false): ValidationResult {
+    return this.validateNumber(field, value, {
+      required,
+      integer: true,
+      min: 1024,
+      max: 65535
+    })
+  }
+
+  static validateFilePath(field: string, value: any, required = false): ValidationResult {
+    return this.validateString(field, value, {
+      required,
+      pattern: this.PATTERNS.FILE_PATH
+    })
+  }
+
+  static validateUrl(field: string, value: any, required = false): ValidationResult {
+    return this.validateStructured(field, value, 'url', { required })
+  }
+
+  /**
+   * Validate multiple fields at once
+   */
+  static validateFields(validations: Array<() => ValidationResult>): ValidationResult {
+    const errors: ValidationError[] = []
+    
+    for (const validation of validations) {
+      const result = validation()
+      if (!result.isValid) {
+        errors.push(...result.errors)
       }
-    },
-    name: {
-      rules: [createStringRule({ 
-        minLength: 1, 
-        maxLength: 100,
-        trim: true 
-      })],
-      options: { required: false }
     }
-  } as ValidationSchema,
 
-  /**
-   * Export command validation
-   */
-  export: {
-    type: {
-      rules: [exportTypeRule],
-      options: { required: false }
-    },
-    format: {
-      rules: [exportFormatRule],
-      options: { required: false }
-    },
-    phone: {
-      rules: [flexiblePhoneNumberRule],
-      options: { required: false }
-    },
-    fromDate: {
-      rules: [iso8601DateRule],
-      options: { required: false }
-    },
-    toDate: {
-      rules: [iso8601DateRule],
-      options: { required: false }
-    },
-    output: {
-      rules: [createFilePathRule({ requireWritable: true })],
-      options: { required: false }
-    }
-  } as ValidationSchema,
-
-  /**
-   * Flow command validation
-   */
-  flow: {
-    action: {
-      rules: [flowActionRule],
-      options: { required: false }
-    },
-    name: {
-      rules: [createStringRule({ 
-        minLength: 1, 
-        maxLength: 50,
-        trim: true 
-      })],
-      options: { required: false }
-    },
-    file: {
-      rules: [
-        createFilePathRule({ 
-          mustExist: true, 
-          allowedExtensions: ['json'] 
-        }),
-        jsonFileRule,
-        flowJsonSchemaRule
-      ],
-      options: { required: false }
-    },
-    flowId: {
-      rules: [simpleIdRule],
-      options: { required: false }
-    },
-    phone: {
-      rules: [flexiblePhoneNumberRule],
-      options: { required: false }
-    }
-  } as ValidationSchema,
-
-  /**
-   * Performance command validation
-   */
-  performance: {
-    action: {
-      rules: [performanceActionRule],
-      options: { required: false }
-    },
-    messages: {
-      rules: [createIntegerRule({ min: 1, max: 10000 })],
-      options: { required: false }
-    },
-    users: {
-      rules: [createIntegerRule({ min: 1, max: 100 })],
-      options: { required: false }
-    },
-    duration: {
-      rules: [createIntegerRule({ min: 1, max: 300 })],
-      options: { required: false }
-    }
-  } as ValidationSchema,
-
-  /**
-   * Server start command validation
-   */
-  start: {
-    config: {
-      rules: [createFilePathRule({ mustExist: true, allowedExtensions: ['js', 'json'] })],
-      options: { required: false }
-    },
-    apiPort: {
-      rules: [portRule],
-      options: { required: false }
-    },
-    uiPort: {
-      rules: [portRule],
-      options: { required: false }
-    },
-    webhookUrl: {
-      rules: [createUrlRule({ requireHttps: false, requirePath: true })],
-      options: { required: false }
-    }
-  } as ValidationSchema,
-
-  /**
-   * Config command validation
-   */
-  config: {
-    config: {
-      rules: [createFilePathRule({ mustExist: true, allowedExtensions: ['js', 'json'] })],
-      options: { required: false }
-    }
-  } as ValidationSchema
-}
-
-/**
- * Quick validation functions for common patterns
- */
-export const QuickValidate = {
-  /**
-   * Validate a phone number
-   */
-  async phoneNumber(value: string, strict = false): Promise<boolean> {
-    const rule = strict ? e164PhoneNumberRule : flexiblePhoneNumberRule
-    const result = await rule.validate(value)
-    return result.isValid
-  },
-
-  /**
-   * Validate a file path exists
-   */
-  async fileExists(path: string): Promise<boolean> {
-    const result = await fileExistsRule.validate(path)
-    return result.isValid
-  },
-
-  /**
-   * Validate a URL format
-   */
-  async url(url: string): Promise<boolean> {
-    const result = await urlFormatRule.validate(url)
-    return result.isValid
-  },
-
-  /**
-   * Validate a port number
-   */
-  async port(port: number | string): Promise<boolean> {
-    const result = await portRule.validate(port)
-    return result.isValid
-  },
-
-  /**
-   * Validate ISO 8601 date
-   */
-  async isoDate(date: string): Promise<boolean> {
-    const result = await iso8601DateRule.validate(date)
-    return result.isValid
-  },
-
-  /**
-   * Validate JSON format
-   */
-  async json(json: string): Promise<boolean> {
-    const result = await jsonParseRule.validate(json)
-    return result.isValid
+    return errors.length === 0 
+      ? ValidationResult.success() 
+      : ValidationResult.errors(errors)
   }
 }

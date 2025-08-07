@@ -25,8 +25,8 @@ export class StartCommand extends BaseCommand {
 
   async execute(options: StartOptions): Promise<void> {
     try {
-      // Load configuration from all sources
-      const config = loadConfig({
+      // Load and validate configuration from all sources
+      const config = await loadConfig({
         configFile: options.config,
         apiPort: options.apiPort ? parseInt(options.apiPort) : undefined,
         uiPort: options.uiPort ? parseInt(options.uiPort) : undefined,

@@ -31,9 +31,35 @@ export class ApiError extends CliError {
  * Error for configuration validation issues
  */
 export class ValidationError extends CliError {
+  public suggestions: string[] = []
+
   constructor(message: string, public field?: string) {
     super(message, 'VALIDATION_ERROR', 1)
     this.field = field
+  }
+
+  /**
+   * Add suggestions to help fix the validation error
+   */
+  addSuggestions(suggestions: string[]): this {
+    this.suggestions.push(...suggestions)
+    return this
+  }
+
+  /**
+   * Get formatted error message with suggestions
+   */
+  getFormattedMessage(): string {
+    let message = this.message
+    
+    if (this.suggestions.length > 0) {
+      message += '\n\n💡 Suggestions:'
+      this.suggestions.forEach(suggestion => {
+        message += `\n  • ${suggestion}`
+      })
+    }
+    
+    return message
   }
 }
 

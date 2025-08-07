@@ -39,11 +39,8 @@ npm run test:watch
 # Run tests with coverage
 npm run test:coverage
 
-# Run a single test file
-npm test -- tests/utils/config.test.ts
-
-# Run tests matching a pattern
-npm test -- --testNamePattern="Configuration"
+# Clear Jest cache (useful after refactoring)
+npx jest --clearCache
 ```
 
 ### Code Quality
@@ -84,11 +81,13 @@ sms-dev export messages --format json   # Export data
   - `stop.ts` - Graceful server shutdown
   - `status.ts` - Server status checking
 - **Utilities**: `src/utils/` - Shared utility modules
-  - `config.ts` - Configuration management with multiple source support (files, env vars, CLI args)
+  - `config.ts` - Simple configuration management for local development (files, env vars, CLI args)
+  - `cors.ts` - Simple CORS middleware for local development
   - `uiServer.ts` - UI server wrapper for Next.js assets
   - `performance.ts` - Performance monitoring utilities
   - `platform.ts` - Cross-platform compatibility helpers
-  - `security.ts` - Security utilities
+  - `security.ts` - Basic security utilities
+  - `configValidation.ts` - Simple configuration validation for local dev tool
 
 ### Key Dependencies
 - **@relay-works/sms-dev-api**: The Express.js API server that handles SMS operations
@@ -109,7 +108,7 @@ Multi-layered configuration precedence (highest to lowest):
 3. Configuration files (sms-dev.config.js, sms-dev.config.json, .smsdevrc)
 4. Default values
 
-Configuration validation includes port range checking (1024-65535), URL validation for webhooks, and type safety.
+Simple configuration validation appropriate for a local development tool, including basic port range checking (1024-65535) and URL validation for webhooks.
 
 ### CLI Command Categories
 - **Core**: start, stop, status, config, init, docs
@@ -158,6 +157,33 @@ The CLI implements comprehensive error handling:
 6. Lint with `npm run lint:fix`
 
 The project follows semantic versioning and includes comprehensive CLI help documentation built into the commands themselves.
+
+## Design Philosophy
+
+SMS-Dev is designed as a **lightweight local development tool** - "the Mailtrap for SMS". The codebase prioritizes:
+
+- **Simplicity over complexity**: Appropriate for single-developer local testing
+- **Developer experience**: Easy to understand, configure, and use
+- **Minimal dependencies**: Only what's necessary for local development
+- **No enterprise features**: No SSL certificates, API keys, or security auditing for localhost
+
+### Recent Refactoring (2025)
+
+The project underwent major refactoring to remove over-engineered enterprise features:
+
+- **Removed**: Complex security framework (SSL/TLS, API keys, security auditing)
+- **Removed**: Over-complex validation system (8 categories → 3 simple types)
+- **Simplified**: Configuration system for local development use
+- **Result**: 10,000+ lines of unnecessary complexity removed
+
+### Validation System
+
+The validation system (`src/validation/index.ts`) is intentionally simple with just 3 core types:
+- `validateString()` - For phone numbers, file paths, names, etc.
+- `validateNumber()` - For ports, counts, timeouts, etc.
+- `validateStructured()` - For URLs, JSON, dates, emails
+
+This covers all CLI validation needs without unnecessary complexity.
 
 ## Important Development Notes
 

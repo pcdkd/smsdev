@@ -1,7 +1,9 @@
 import fs from 'fs'
 import path from 'path'
 import { createRequire } from 'module'
-import { SmsDevConfig } from '@relay-works/sms-dev-types'
+import { SmsDevConfig, CliConfig, ConfigOptions } from '../types/config.js'
+import { configValidator } from './configValidation.js'
+import { ValidationError } from '../types/errors.js'
 
 // Create require for loading CommonJS modules in ES module context
 const require = createRequire(import.meta.url)
@@ -21,69 +23,86 @@ const defaultConfig: SmsDevConfig = {
   }
 }
 
-// Extended config interface for CLI-specific options
-export interface CliConfig extends SmsDevConfig {
-  startUI: boolean
-  verbose: boolean
-  configFile?: string
-}
-
-export interface ConfigOptions {
-  configFile?: string
-  apiPort?: number
-  uiPort?: number
-  webhookUrl?: string
-  startUI?: boolean
-  verbose?: boolean
-}
+// Types are now imported from ../types/config.js
 
 /**
- * Load configuration from various sources in order of precedence:
+ * Load configuration from various sources with enhanced validation:
  * 1. CLI arguments (highest priority)
  * 2. Environment variables
  * 3. Configuration file
  * 4. Default values (lowest priority)
  */
-export function loadConfig(options: ConfigOptions = {}): CliConfig {
-  // Start with defaults
-  let config: CliConfig = {
-    ...defaultConfig,
-    startUI: true,
-    verbose: false
+export async function loadConfig(options: ConfigOptions = {}): Promise<CliConfig> {
+  try {
+    // Start with defaults
+    let config: CliConfig = {
+      ...defaultConfig,
+      startUI: true,
+      verbose: false
+    }
+
+    // 1. Validate and load from configuration file
+    const fileConfig = await loadConfigFileWithValidation(options.configFile)
+    if (fileConfig) {
+      config = mergeConfig(config, fileConfig as Partial<CliConfig>)
+    }
+
+    // 2. Validate and load from environment variables
+    const envConfig = await configValidator.validateEnvironmentConfig()
+    config = mergeConfig(config, envConfig)
+
+    // 3. Validate and apply CLI arguments (highest priority)
+    const validatedCliOptions = await configValidator.validateCliArgs(options)
+    const cliConfig: Partial<CliConfig> = {}
+    if (validatedCliOptions.apiPort) cliConfig.apiPort = validatedCliOptions.apiPort
+    if (validatedCliOptions.uiPort) cliConfig.uiPort = validatedCliOptions.uiPort
+    if (validatedCliOptions.webhookUrl) cliConfig.webhookUrl = validatedCliOptions.webhookUrl
+    if (typeof validatedCliOptions.startUI !== 'undefined') cliConfig.startUI = validatedCliOptions.startUI
+    if (typeof validatedCliOptions.verbose !== 'undefined') cliConfig.verbose = validatedCliOptions.verbose
+    if (validatedCliOptions.configFile) cliConfig.configFile = validatedCliOptions.configFile
+    
+    config = mergeConfig(config, cliConfig)
+
+    // Final comprehensive validation of merged configuration
+    const finalValidatedConfig = await configValidator.validateConfig(config, 'Final configuration')
+    return mergeConfig(config, finalValidatedConfig)
+
+  } catch (error) {
+    if (error instanceof ValidationError) {
+      // Enhanced error message with configuration help
+      const enhancedMessage = error.getFormattedMessage() + 
+        `\n\n🔧 Configuration Help:` +
+        `\n  • Run "sms-dev init" to create a sample config file` +
+        `\n  • Run "sms-dev config" to view current settings` +
+        `\n  • Check environment variables (SMS_DEV_* prefix)` +
+        `\n  • Use --help for command-line options`
+      
+      throw new ValidationError(enhancedMessage, error.field)
+    }
+    throw error
   }
-
-  // 1. Load from configuration file
-  const fileConfig = loadConfigFile(options.configFile)
-  if (fileConfig) {
-    config = mergeConfig(config, fileConfig as Partial<CliConfig>)
-  }
-
-  // 2. Load from environment variables
-  const envConfig = loadEnvironmentConfig()
-  config = mergeConfig(config, envConfig)
-
-  // 3. Apply CLI arguments (highest priority)
-  const cliConfig: Partial<CliConfig> = {}
-  if (options.apiPort) cliConfig.apiPort = options.apiPort
-  if (options.uiPort) cliConfig.uiPort = options.uiPort
-  if (options.webhookUrl) cliConfig.webhookUrl = options.webhookUrl
-  if (typeof options.startUI !== 'undefined') cliConfig.startUI = options.startUI
-  if (typeof options.verbose !== 'undefined') cliConfig.verbose = options.verbose
-  
-  config = mergeConfig(config, cliConfig)
-
-  return config
 }
 
 /**
- * Load configuration from a file (JS, JSON, or auto-detect)
+ * Load configuration from a file with enhanced validation
  */
-function loadConfigFile(configFile?: string): Partial<SmsDevConfig> | null {
+async function loadConfigFileWithValidation(configFile?: string): Promise<Partial<SmsDevConfig> | null> {
   const configPaths = configFile ? [configFile] : findConfigFiles()
   
   for (const configPath of configPaths) {
     try {
       if (!fs.existsSync(configPath)) {
+        if (configFile) {
+          // If a specific file was requested but doesn't exist, throw error
+          throw new ValidationError(
+            `Configuration file not found: ${configPath}`,
+            'configFile'
+          ).addSuggestions([
+            'Check the file path for typos',
+            'Use an absolute path if needed',
+            'Run "sms-dev init" to create a sample config file'
+          ])
+        }
         continue
       }
 
@@ -91,31 +110,82 @@ function loadConfigFile(configFile?: string): Partial<SmsDevConfig> | null {
       const absolutePath = path.resolve(configPath)
       let config: any
 
-      if (ext === '.json' || path.basename(configPath).startsWith('.smsdevrc')) {
-        const content = fs.readFileSync(configPath, 'utf8')
-        config = JSON.parse(content)
-      } else if (ext === '.js') {
-        // Clear require cache to ensure fresh load
-        delete require.cache[absolutePath]
-        config = require(absolutePath)
-        
-        // Handle both default exports and direct exports
-        if (config.default) {
-          config = config.default
+      try {
+        if (ext === '.json' || path.basename(configPath).startsWith('.smsdevrc')) {
+          const content = fs.readFileSync(configPath, 'utf8')
+          config = JSON.parse(content)
+        } else if (ext === '.js') {
+          // Clear require cache to ensure fresh load
+          delete require.cache[absolutePath]
+          config = require(absolutePath)
+          
+          // Handle both default exports and direct exports
+          if (config.default) {
+            config = config.default
+          }
+        } else if (ext === '.mjs') {
+          throw new ValidationError(
+            `ES modules (.mjs) not supported yet. Use .js with module.exports instead.`,
+            'configFile'
+          ).addSuggestions([
+            'Rename the file from .mjs to .js',
+            'Use module.exports = { ... } instead of export default',
+            'Use .json format for simple configurations'
+          ])
+        } else {
+          continue
         }
-      } else if (ext === '.mjs') {
-        // For ES modules, we need to use dynamic import
-        // Note: This is more complex in practice, for now we'll recommend .js with CommonJS
-        console.warn(`⚠️  ES modules (.mjs) not supported yet. Use .js with module.exports instead.`)
-        continue
-      } else {
-        continue
+      } catch (error: any) {
+        if (error instanceof ValidationError) {
+          throw error
+        }
+        
+        const fileError = new ValidationError(
+          `Failed to parse config file "${configPath}": ${error.message}`,
+          'configFile'
+        )
+        
+        if (error instanceof SyntaxError) {
+          if (ext === '.json') {
+            fileError.addSuggestions([
+              'Check for missing commas between properties',
+              'Ensure all strings are in double quotes',
+              'Verify brackets and braces are properly matched',
+              'Remove trailing commas (not allowed in JSON)',
+              'Use a JSON validator to check syntax'
+            ])
+          } else if (ext === '.js') {
+            fileError.addSuggestions([
+              'Check JavaScript syntax in the config file',
+              'Ensure module.exports is properly defined',
+              'Try using JSON format instead (.json extension)',
+              'Check for syntax errors in the configuration object'
+            ])
+          }
+        }
+        
+        throw fileError
       }
 
       console.log(`📋 Loaded configuration from: ${configPath}`)
-      return validateConfig(config)
+      
+      // Validate the loaded configuration
+      return await configValidator.validateConfigFile(configPath, config)
+      
     } catch (error: any) {
-      console.warn(`⚠️  Failed to load config file ${configPath}:`, error?.message || error)
+      if (error instanceof ValidationError) {
+        throw error
+      }
+      
+      throw new ValidationError(
+        `Failed to load config file ${configPath}: ${error?.message || error}`,
+        'configFile'
+      ).addSuggestions([
+        'Check file permissions',
+        'Ensure the file is readable',
+        'Try using a different configuration format',
+        'Run "sms-dev init" to create a sample config file'
+      ])
     }
   }
 
@@ -136,122 +206,7 @@ function findConfigFiles(): string[] {
   ]
 }
 
-/**
- * Load configuration from environment variables
- */
-function loadEnvironmentConfig(): Partial<CliConfig> {
-  const config: Partial<CliConfig> = {}
-
-  // Port configuration
-  if (process.env.SMS_DEV_API_PORT) {
-    config.apiPort = parseInt(process.env.SMS_DEV_API_PORT)
-  }
-  if (process.env.SMS_DEV_UI_PORT) {
-    config.uiPort = parseInt(process.env.SMS_DEV_UI_PORT)
-  }
-
-  // Webhook configuration
-  if (process.env.SMS_DEV_WEBHOOK_URL) {
-    config.webhookUrl = process.env.SMS_DEV_WEBHOOK_URL
-  }
-
-  // CORS configuration
-  if (process.env.SMS_DEV_CORS_ORIGINS) {
-    config.cors = {
-      enabled: true,
-      origins: process.env.SMS_DEV_CORS_ORIGINS.split(',').map(o => o.trim())
-    }
-  }
-
-  // Logging configuration
-  if (process.env.SMS_DEV_LOG_LEVEL) {
-    const level = process.env.SMS_DEV_LOG_LEVEL.toLowerCase()
-    if (['debug', 'info', 'warn', 'error'].includes(level)) {
-      config.logging = {
-        ...defaultConfig.logging,
-        level: level as 'debug' | 'info' | 'warn' | 'error'
-      }
-    }
-  }
-
-  if (process.env.SMS_DEV_VERBOSE === 'true') {
-    config.verbose = true
-    config.logging = {
-      ...config.logging || defaultConfig.logging,
-      enabled: true
-    }
-  }
-
-  // UI configuration
-  if (process.env.SMS_DEV_NO_UI === 'true') {
-    config.startUI = false
-  }
-
-  return config
-}
-
-/**
- * Validate configuration object
- */
-function validateConfig(config: any): Partial<SmsDevConfig> {
-  const validatedConfig: Partial<SmsDevConfig> = {}
-
-  // Validate ports
-  if (config.apiPort !== undefined) {
-    const port = parseInt(config.apiPort)
-    if (isNaN(port) || port < 1024 || port > 65535) {
-      throw new Error(`Invalid apiPort: ${config.apiPort}. Must be between 1024-65535`)
-    }
-    validatedConfig.apiPort = port
-  }
-
-  if (config.uiPort !== undefined) {
-    const port = parseInt(config.uiPort)
-    if (isNaN(port) || port < 1024 || port > 65535) {
-      throw new Error(`Invalid uiPort: ${config.uiPort}. Must be between 1024-65535`)
-    }
-    validatedConfig.uiPort = port
-  }
-
-  // Validate webhook URL
-  if (config.webhookUrl !== undefined) {
-    if (typeof config.webhookUrl !== 'string') {
-      throw new Error('webhookUrl must be a string')
-    }
-    try {
-      new URL(config.webhookUrl)
-      validatedConfig.webhookUrl = config.webhookUrl
-    } catch {
-      throw new Error(`Invalid webhookUrl: ${config.webhookUrl}`)
-    }
-  }
-
-  // Validate CORS
-  if (config.cors !== undefined) {
-    if (typeof config.cors !== 'object') {
-      throw new Error('cors must be an object')
-    }
-    validatedConfig.cors = {
-      enabled: Boolean(config.cors.enabled !== false),
-      origins: Array.isArray(config.cors.origins) ? config.cors.origins : ['*']
-    }
-  }
-
-  // Validate logging
-  if (config.logging !== undefined) {
-    if (typeof config.logging !== 'object') {
-      throw new Error('logging must be an object')
-    }
-    validatedConfig.logging = {
-      enabled: Boolean(config.logging.enabled !== false),
-      level: ['debug', 'info', 'warn', 'error'].includes(config.logging.level) 
-        ? config.logging.level 
-        : 'info'
-    }
-  }
-
-  return validatedConfig
-}
+// Environment and validation functions have been moved to configValidation.ts
 
 /**
  * Merge two configuration objects (simple merge for our use case)
@@ -277,33 +232,79 @@ function mergeConfig<T extends Record<string, any>>(base: T, override: Partial<T
 }
 
 /**
- * Generate a sample configuration file
+ * Generate a comprehensive sample configuration file with validation-aware comments
  */
 export function generateSampleConfig(): string {
   return `// sms-dev.config.js
 // Configuration file for sms-dev local SMS development tool
+// This configuration is validated automatically with detailed error messages
 
 /** @type {import('@relay-works/sms-dev-types').SmsDevConfig} */
 module.exports = {
-  // Server ports
-  apiPort: 4001,
-  uiPort: 4000,
+  // Server Configuration
+  // Both ports must be between 1024-65535 and cannot conflict
+  apiPort: 4001,        // API server port (default: 4001)
+  uiPort: 4000,         // UI server port (default: 4000)
 
-  // Webhook URL for testing inbound messages
-  // webhookUrl: 'http://localhost:3000/webhook/sms',
+  // Webhook Configuration
+  // URL must be a valid HTTP/HTTPS endpoint with a specific path
+  // HTTPS is recommended for external URLs (HTTP allowed for localhost)
+  // webhookUrl: 'https://api.yourapp.com/webhooks/sms',
+  // webhookUrl: 'http://localhost:3000/webhook', // Development example
 
-  // CORS configuration
+  // CORS Configuration  
+  // Controls which origins can access the API from browsers
   cors: {
-    enabled: true,
-    origins: ['*'] // Allow all origins in development
+    enabled: true,        // Enable/disable CORS (boolean)
+    origins: ['*']        // Array of allowed origins or ['*'] for all
+    // origins: ['http://localhost:3000', 'https://yourapp.com'] // Production example
   },
 
-  // Logging configuration
+  // Logging Configuration
+  // Controls console output and debugging information
   logging: {
-    enabled: true,
-    level: 'info' // 'debug' | 'info' | 'warn' | 'error'
+    enabled: true,        // Enable/disable logging (boolean)
+    level: 'info'         // Log level: 'debug' | 'info' | 'warn' | 'error'
   }
+
+  // Additional Notes:
+  // - Run "sms-dev config" to see current configuration
+  // - Environment variables override these settings (SMS_DEV_* prefix)
+  // - CLI arguments have highest priority
+  // - Invalid configurations show detailed error messages with suggestions
 }
+`
+}
+
+/**
+ * Generate environment variable documentation
+ */
+export function generateEnvironmentDocs(): string {
+  return `# SMS-Dev Environment Variables
+# All environment variables are optional and override configuration file settings
+
+# Server Configuration
+SMS_DEV_API_PORT=4001          # API server port (1024-65535)
+SMS_DEV_UI_PORT=4000           # UI server port (1024-65535, different from API port)
+
+# Webhook Configuration  
+SMS_DEV_WEBHOOK_URL=https://api.example.com/webhook  # Must be valid URL with path
+
+# CORS Configuration
+SMS_DEV_CORS_ORIGINS="http://localhost:3000,https://yourapp.com"  # Comma-separated URLs
+
+# Logging Configuration
+SMS_DEV_LOG_LEVEL=info         # debug | info | warn | error
+SMS_DEV_VERBOSE=true           # Enable verbose output (true/false)
+
+# UI Configuration
+SMS_DEV_NO_UI=false            # Disable UI server (true to disable)
+
+# Configuration Help:
+# - Invalid values show detailed error messages with suggestions
+# - Run "sms-dev config" to see current configuration
+# - Run "sms-dev init" to create sample config file
+# - Use "sms-dev start --help" for CLI options
 `
 }
 

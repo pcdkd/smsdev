@@ -17,7 +17,7 @@ export class ConfigCommand extends BaseCommand {
 
   async execute(options: ConfigOptions): Promise<void> {
     try {
-      const config = loadConfig({
+      const config = await loadConfig({
         configFile: options.config
       })
       printConfig(config)

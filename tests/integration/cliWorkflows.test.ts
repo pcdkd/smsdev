@@ -10,8 +10,13 @@ import fs from 'fs'
 import { promisify } from 'util'
 import http from 'http'
 import net from 'net'
+import { fileURLToPath } from 'url'
 
 const sleep = promisify(setTimeout)
+
+// Get directory for ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // CLI executable path
 const CLI_PATH = path.join(__dirname, '../../dist/cli.js')

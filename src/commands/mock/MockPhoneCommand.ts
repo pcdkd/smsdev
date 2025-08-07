@@ -4,7 +4,7 @@ import { ApiClient } from '../../services/ApiClient.js'
 import { ValidationError } from '../../types/errors.js'
 import { ENDPOINTS, MOCK_PHONE_TYPES } from '../../constants.js'
 import { MockPhone, MockPhonesResponse } from '../../types/api.js'
-import { CommandValidationSchemas } from '../../validation/index.js'
+import { CLIValidator } from '../../validation/index.js'
 
 /**
  * Options for the mock-phone command
@@ -36,8 +36,10 @@ export class MockPhoneCommand extends BaseCommand {
   }
 
   async execute(options: MockPhoneOptions): Promise<void> {
-    // Validate all options with comprehensive validation
-    await this.validateOptions(options, CommandValidationSchemas.mockPhone)
+    // Simple validation for phone commands
+    if (options.phone && (options.action === 'create' || options.action === 'delete')) {
+      this.validatePhoneNumber(options.phone, true)
+    }
     
     const action = options.action
 
@@ -66,14 +68,11 @@ export class MockPhoneCommand extends BaseCommand {
     }
     
     // Additional validation for phone number format
-    const sanitizedPhone = await this.validatePhoneNumber(options.phone, false)
+    const sanitizedPhone = this.validatePhoneNumber(options.phone, false)
     
-    // Name validation if provided
-    if (options.name) {
-      const { createStringRule } = await import('../../validation/rules/string.js')
-      options.name = await this.validateField('name', options.name, [
-        createStringRule({ minLength: 1, maxLength: 100, trim: true })
-      ])
+    // Name validation if provided - simple validation for local dev
+    if (options.name && (options.name.length < 1 || options.name.length > 100)) {
+      throw new ValidationError('Name must be between 1 and 100 characters', 'name')
     }
 
     try {

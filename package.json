@@ -140,8 +140,7 @@
       "@typescript-eslint"
     ],
     "extends": [
-      "eslint:recommended",
-      "@typescript-eslint/recommended"
+      "eslint:recommended"
     ],
     "parserOptions": {
       "ecmaVersion": 2022,

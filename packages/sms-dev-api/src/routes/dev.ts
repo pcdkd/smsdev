@@ -488,6 +488,7 @@ function evaluateCondition(condition: string, context: Record<string, any>): boo
     const comparisonMatch = processedCondition.match(/^(\d+(?:\.\d+)?)\s*(>|<|>=|<=)\s*(\d+(?:\.\d+)?)$/)
     if (comparisonMatch) {
       const [, left, operator, right] = comparisonMatch
+      if (!left || !right) return false
       const leftNum = parseFloat(left)
       const rightNum = parseFloat(right)
       switch (operator) {

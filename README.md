@@ -59,7 +59,7 @@ npm run sms-dev
 ### Basic SMS Testing
 
 ```javascript
-// Your application code
+// Your application code - raw message
 const response = await fetch('http://localhost:4001/v1/messages', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
@@ -71,6 +71,30 @@ const response = await fetch('http://localhost:4001/v1/messages', {
 
 const message = await response.json()
 console.log('Message sent:', message.id)
+console.log('Message text:', message.message)
+```
+
+### Template-Based SMS (Production-Compatible)
+
+```javascript
+// Using templates (required for Relay Starter tier in production)
+const response = await fetch('http://localhost:4001/v1/messages/send-template', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    template: 'otp-verification',
+    to: '+1234567890',
+    data: {
+      code: '123456',
+      expiry: '10'
+    }
+  })
+})
+
+const message = await response.json()
+console.log('Template sent:', message.id)
+console.log('Rendered text:', message.message)
+// Output: "Your verification code is 123456. It expires in 10 minutes."
 ```
 
 ### Webhook Testing
@@ -195,7 +219,7 @@ module.exports = {
 
 ## 🔌 API Documentation
 
-### Send Message
+### Send Message (Raw)
 
 ```http
 POST /v1/messages
@@ -207,6 +231,35 @@ Content-Type: application/json
   "body": "Hello world!"
 }
 ```
+
+### Send Template Message (Production-Compatible)
+
+```http
+POST /v1/messages/send-template
+Content-Type: application/json
+
+{
+  "template": "otp-verification",
+  "to": "+1234567890",
+  "data": {
+    "code": "123456",
+    "expiry": "10"
+  }
+}
+```
+
+### List Available Templates
+
+```http
+GET /v1/messages/templates
+```
+
+Response includes mock templates:
+- `otp-verification` - 2FA verification codes
+- `password-reset` - Password reset codes
+- `appointment-reminder` - Appointment notifications
+- `order-confirmation` - Order confirmations
+- `shipping-update` - Shipping notifications
 
 ### List Messages
 
@@ -227,6 +280,8 @@ GET /v1/dev/performance/stats
 ```
 
 [View Full API Documentation →](https://smsdev.app/docs/api)
+
+**Production Note:** In production Relay API, Starter tier users ($19/mo) **must use templates** - raw message sending returns a 402 error. SMS-Dev allows both for testing flexibility. [Learn about production differences →](https://smsdev.app/docs/production-differences)
 
 ## 🎯 Framework Integration
 

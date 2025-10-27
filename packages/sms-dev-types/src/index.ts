@@ -21,8 +21,38 @@ export interface SendMessageResponse {
   id: string
   to: string
   from: string
-  body: string
+  message: string  // Production uses 'message' field in responses
   status: 'queued'
+  created_at: string
+  cost: number
+}
+
+// Template message request (for /v1/messages/send-template endpoint)
+export interface SendTemplateMessageRequest {
+  template: string  // Template ID
+  to: string
+  from?: string
+  data?: Record<string, any>  // Template variables
+  variant?: string
+  metadata?: Record<string, any>
+}
+
+// Template message response
+export interface SendTemplateMessageResponse {
+  id: string
+  to: string
+  from: string
+  message: string
+  status: 'queued' | 'sent'
+  template: {
+    template_id: string
+    variant: string | null
+    resolved_from: 'mock' | 'package'
+    variables_used: string[]
+    variables_missing: string[]
+    character_count: number
+    sms_segments: number
+  }
   created_at: string
   cost: number
 }

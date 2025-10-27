@@ -1,12 +1,14 @@
 import { Router, Request, Response } from 'express'
 import { body, param, query, validationResult } from 'express-validator'
 import { v4 as uuidv4 } from 'uuid'
-import { 
-  SendMessageRequest, 
-  SendMessageResponse, 
-  GetMessageResponse, 
+import {
+  SendMessageRequest,
+  SendMessageResponse,
+  SendTemplateMessageRequest,
+  SendTemplateMessageResponse,
+  GetMessageResponse,
   ListMessagesResponse,
-  Message 
+  Message
 } from '@relay-works/sms-dev-types'
 
 const router = Router()
@@ -76,17 +78,158 @@ router.post('/', [
   }, 500)
 
   // Return immediate response (like production API)
+  // Note: Response uses 'message' field to match production API
   const response: SendMessageResponse = {
     id: message.id,
     to: message.to,
     from: message.from,
-    body: message.body,
+    message: message.body, // Production maps 'body' → 'message' in response
     status: 'queued',
     created_at: message.created_at,
     cost: message.cost!
   }
 
   res.status(201).json(response)
+})
+
+// POST /v1/messages/send-template - Send SMS using template (production-compatible)
+router.post('/send-template', [
+  body('template').isString().notEmpty().withMessage('template ID is required'),
+  body('to').isString().notEmpty().withMessage('to is required'),
+  body('from').optional().isString(),
+  body('data').optional().isObject().withMessage('data must be an object'),
+  body('variant').optional().isString(),
+  body('metadata').optional().isObject()
+], async (req: Request, res: Response) => {
+  const errors = validationResult(req)
+  if (!errors.isEmpty()) {
+    return res.status(400).json({
+      error: 'Validation Error',
+      message: 'Invalid request data',
+      details: errors.array(),
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  const { template: templateId, to, from, data, variant, metadata }: SendTemplateMessageRequest = req.body
+  const messageId = `msg_${uuidv4().replace(/-/g, '')}`
+
+  // Import mock template utilities
+  const { getMockTemplate, renderMockTemplate, calculateSmsSegments, validateMockTemplateData } = await import('../templates/mockCatalog.js')
+
+  // Retrieve template from mock catalog
+  const template = getMockTemplate(templateId)
+  if (!template) {
+    return res.status(404).json({
+      error: 'Template Not Found',
+      message: `Template '${templateId}' not found in mock catalog`,
+      available_templates: ['otp-verification', 'password-reset', 'appointment-reminder', 'order-confirmation', 'shipping-update'],
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  // Validate template data
+  const validation = validateMockTemplateData(template, data || {})
+  if (!validation.valid) {
+    return res.status(400).json({
+      error: 'Template Validation Failed',
+      message: 'Missing or invalid template variables',
+      validation_errors: validation.errors,
+      timestamp: new Date().toISOString()
+    })
+  }
+
+  // Render template with variable interpolation
+  const rendered = renderMockTemplate(template, data || {})
+  const finalMessage = rendered.text
+
+  // Note: In local dev, we DON'T append "- Sent by Relay" signature
+  // This allows testing the exact template output
+  // Production appends signature for Starter tier only
+
+  // Calculate SMS segments
+  const segmentCount = calculateSmsSegments(finalMessage)
+
+  // Create message record
+  const message: Message = {
+    id: messageId,
+    to,
+    from: from || '+15551234567',
+    body: finalMessage,
+    status: 'queued',
+    created_at: new Date().toISOString(),
+    cost: 0.01 * segmentCount
+  }
+
+  // Store message
+  messages.set(messageId, message)
+
+  // Simulate async processing
+  setTimeout(() => {
+    const storedMessage = messages.get(messageId)
+    if (storedMessage) {
+      storedMessage.status = 'sent'
+      messages.set(messageId, storedMessage)
+
+      const io = (req as any).io
+      if (io) {
+        io.emit('message:updated', storedMessage)
+      }
+
+      setTimeout(() => {
+        const deliveredMessage = messages.get(messageId)
+        if (deliveredMessage) {
+          deliveredMessage.status = 'delivered'
+          deliveredMessage.delivered_at = new Date().toISOString()
+          messages.set(messageId, deliveredMessage)
+
+          if (io) {
+            io.emit('message:updated', deliveredMessage)
+          }
+        }
+      }, 1000)
+    }
+  }, 500)
+
+  // Return response matching production format
+  const response: SendTemplateMessageResponse = {
+    id: message.id,
+    to: message.to,
+    from: message.from,
+    message: finalMessage,
+    status: 'queued',
+    template: {
+      template_id: templateId,
+      variant: variant || null,
+      resolved_from: 'mock',
+      variables_used: rendered.variablesUsed,
+      variables_missing: rendered.variablesMissing,
+      character_count: finalMessage.length,
+      sms_segments: segmentCount
+    },
+    created_at: message.created_at,
+    cost: message.cost!
+  }
+
+  res.status(201).json(response)
+})
+
+// GET /v1/messages/templates - List available templates (dev-only helper endpoint)
+router.get('/templates', async (req: Request, res: Response) => {
+  const { mockTemplates } = await import('../templates/mockCatalog.js')
+
+  res.json({
+    templates: mockTemplates.map(t => ({
+      id: t.id,
+      name: t.name,
+      category: t.category,
+      description: t.description,
+      variables: t.variables,
+      campaign_type: t.campaignType
+    })),
+    total: mockTemplates.length,
+    note: 'These are mock templates for local development. Production uses curated templates from @relay-works/templates with Starter tier restrictions (2FA and CUSTOMER_CARE only).'
+  })
 })
 
 // GET /v1/messages/:id - Get a specific message

@@ -1,6 +1,6 @@
 {
   "name": "@relay-works/sms-dev-api",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "type": "module",
   "description": "Local API server that simulates the Relay SMS API",
   "main": "dist/index.js",
